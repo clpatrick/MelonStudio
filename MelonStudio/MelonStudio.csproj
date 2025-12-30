@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.4.231008000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.4.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
