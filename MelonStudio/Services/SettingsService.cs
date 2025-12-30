@@ -1,6 +1,6 @@
 using System;
 
-namespace LocalLLMchat.Services
+namespace MelonStudio.Services
 {
     public class SettingsService
     {

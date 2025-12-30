@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml;
 
-namespace LocalLLMchat
+namespace MelonStudio
 {
     public partial class App : Application
     {

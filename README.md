@@ -1,4 +1,4 @@
-# LocalLLMchat - Windows 11 Native AI
+# MelonStudio - Windows 11 Native AI
 
 A native Windows 11 application (WinUI 3) that runs local LLMs (Phi-3, Llama-3) on NVIDIA RTX 4090 using standard ONNX Runtime GenAI with TensorRT acceleration.
 
@@ -26,7 +26,7 @@ This app does **not** download models automatically. You must providing the path
 
 ## Building
 
-1.  Open `LocalLLMchat.sln` in Visual Studio.
+1.  Open `MelonStudio.sln` in Visual Studio.
 2.  Restore NuGet packages (this may take a few minutes as `Microsoft.ML.OnnxRuntimeGenAI.Cuda` downloads large binaries).
 3.  Set platform to `x64`.
 4.  Build and Run.

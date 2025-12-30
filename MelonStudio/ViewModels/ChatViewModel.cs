@@ -3,10 +3,10 @@ using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using LocalLLMchat.Models;
-using LocalLLMchat.Services;
+using MelonStudio.Models;
+using MelonStudio.Services;
 
-namespace LocalLLMchat.ViewModels
+namespace MelonStudio.ViewModels
 {
     public partial class ChatViewModel : ObservableObject
     {

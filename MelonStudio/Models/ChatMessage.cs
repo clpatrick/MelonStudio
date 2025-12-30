@@ -1,4 +1,4 @@
-namespace LocalLLMchat.Models
+namespace MelonStudio.Models
 {
     public enum ChatRole
     {

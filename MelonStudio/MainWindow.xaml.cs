@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml;
-using LocalLLMchat.ViewModels;
+using MelonStudio.ViewModels;
 
-namespace LocalLLMchat
+namespace MelonStudio
 {
     public sealed partial class MainWindow : Window
     {

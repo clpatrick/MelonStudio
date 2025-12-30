@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.ML.OnnxRuntimeGenAI;
 
-namespace LocalLLMchat.Services
+namespace MelonStudio.Services
 {
     public class LLMService : IDisposable
     {
