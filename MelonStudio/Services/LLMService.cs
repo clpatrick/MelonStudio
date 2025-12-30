@@ -76,18 +76,22 @@ namespace MelonStudio.Services
                 // Let's rely on standard loop pattern for C# GenAI.
                 
                 // Optimized approach: keep track of previous token count or use specific API if available.
-                // Standard example uses tokenizer.Decode on the last generated token.
                 
-                // Get the last generated token id
-                // There isn't a direct "GetLastToken" simple API in all versions, 
-                // but usually we can get the sequence.
-                 var outputCallback = generator.GetSequence(0);
-                 var newTokenId = outputCallback[outputCallback.Length - 1];
+                // Fix for CS8652: Span<T> cannot be used in async methods in C# 12 and older.
+                // We extract the logic to a synchronous method.
+                var newTokenId = GetLastTokenId(generator);
                  
-                 var decodedToken = _tokenizer.Decode(new[] { newTokenId });
+                var decodedToken = _tokenizer.Decode(new[] { newTokenId });
                  
-                 yield return decodedToken;
+                yield return decodedToken;
             }
+        }
+
+        private int GetLastTokenId(Generator generator)
+        {
+            // This method is synchronous, so using Span (ref struct) here is allowed.
+            var outputCallback = generator.GetSequence(0);
+            return outputCallback[outputCallback.Length - 1];
         }
 
         public void Dispose()
