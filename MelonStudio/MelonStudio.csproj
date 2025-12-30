@@ -10,13 +10,13 @@
     <UseWinUI>true</UseWinUI>
     <!-- Fix for Appx build error: Run as "Unpackaged" app -->
     <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- Allow newer language features if compiler supports it -->
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.4.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
   </ItemGroup>
