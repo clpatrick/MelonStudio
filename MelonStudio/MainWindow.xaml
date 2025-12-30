@@ -56,13 +56,15 @@
         </Border>
         
         <!-- Status Overlay -->
+        <!-- Status Overlay - Disabled for MVP to avoid missing converter resource
         <Grid Grid.RowSpan="2" Background="#80000000" Visibility="{x:Bind ViewModel.IsGenerating, Mode=OneWay, Converter={StaticResource BoolToVisConverter}}" 
               x:Name="LoadingOverlay" IsHitTestVisible="False" d:Visibility="Collapsed">
-             <!-- Note: Converter requires resource dictionary setup. 
+             Note: Converter requires resource dictionary setup. 
                   For MVP simplicity strictly in XAML, we might skip converter or implement fallback.
                   Let's use a TextBlock bound to StatusMessage in the input area instead of complex overlay for now to avoid resource issues.
-             -->
+             
         </Grid>
+        -->
         
         <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" Grid.Row="1" VerticalAlignment="Top" HorizontalAlignment="Left" 
                    Margin="20,-20,0,0" FontSize="10" Foreground="Gray"/>
