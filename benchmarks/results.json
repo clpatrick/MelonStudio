@@ -1,0 +1,10 @@
+{
+  "Timestamp": "Not yet run",
+  "ModelPath": "",
+  "MachineName": "",
+  "Results": [],
+  "AverageTokensPerSecond": 0,
+  "TotalElapsedSeconds": 0,
+  "TotalTokensGenerated": 0,
+  "Error": "Benchmark not yet executed. Run MelonStudio.Benchmark on workstation with RTX 4090."
+}

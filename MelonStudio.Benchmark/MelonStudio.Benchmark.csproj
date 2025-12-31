@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <RootNamespace>MelonStudio</RootNamespace>
-    <UseWPF>true</UseWPF>
+    <RootNamespace>MelonStudio.Benchmark</RootNamespace>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <LangVersion>latest</LangVersion>
@@ -13,6 +12,5 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.4.0" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
   </ItemGroup>
 </Project>

@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace MelonStudio.Models
 {
     public enum ChatRole
@@ -7,10 +9,13 @@ namespace MelonStudio.Models
         System
     }
 
-    public class ChatMessage
+    public partial class ChatMessage : ObservableObject
     {
-        public ChatRole Role { get; set; }
-        public string Content { get; set; }
+        [ObservableProperty]
+        private ChatRole _role;
+        
+        [ObservableProperty]
+        private string _content = string.Empty;
 
         public ChatMessage(ChatRole role, string content)
         {
