@@ -14,7 +14,7 @@ public class BenchmarkResult
     public string Timestamp { get; set; } = DateTime.UtcNow.ToString("o");
     public string ModelPath { get; set; } = "";
     public string MachineName { get; set; } = Environment.MachineName;
-    public List&lt;PromptResult&gt; Results { get; set; } = new();
+    public List<PromptResult> Results { get; set; } = new();
     public double AverageTokensPerSecond { get; set; }
     public double TotalElapsedSeconds { get; set; }
     public int TotalTokensGenerated { get; set; }
@@ -41,10 +41,10 @@ public class Program
         "List 5 benefits of exercise."
     };
 
-    public static async Task&lt;int&gt; Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        var modelPath = args.Length &gt; 0 ? args[0] : @"C:\AI\Models\Phi-3-mini-4k-instruct-onnx";
-        var outputPath = args.Length &gt; 1 ? args[1] : "benchmarks/results.json";
+        var modelPath = args.Length > 0 ? args[0] : @"C:\AI\Models\Phi-3-mini-4k-instruct-onnx";
+        var outputPath = args.Length > 1 ? args[1] : "benchmarks/results.json";
 
         Console.WriteLine("=== MelonStudio Benchmark ===");
         Console.WriteLine($"Model Path: {modelPath}");
@@ -87,7 +87,7 @@ public class Program
             totalStopwatch.Stop();
 
             result.TotalElapsedSeconds = totalStopwatch.Elapsed.TotalSeconds;
-            result.TotalTokensGenerated = result.Results.Sum(r =&gt; r.TokensGenerated);
+            result.TotalTokensGenerated = result.Results.Sum(r => r.TokensGenerated);
             result.AverageTokensPerSecond = result.TotalTokensGenerated / result.TotalElapsedSeconds;
 
             Console.WriteLine("=== Summary ===");
@@ -106,7 +106,7 @@ public class Program
         try
         {
             var outputDir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(outputDir) &amp;&amp; !Directory.Exists(outputDir))
+            if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
             {
                 Directory.CreateDirectory(outputDir);
             }
@@ -128,12 +128,12 @@ public class Program
         return result.Error != null ? 1 : 0;
     }
 
-    private static async Task&lt;PromptResult&gt; RunPromptAsync(Model model, Tokenizer tokenizer, string prompt)
+    private static async Task<PromptResult> RunPromptAsync(Model model, Tokenizer tokenizer, string prompt)
     {
         var result = new PromptResult { Prompt = prompt };
         
         // Phi-3 chat format
-        var fullPrompt = $"&lt;|user|&gt;\n{prompt}&lt;|end|&gt;\n&lt;|assistant|&gt;";
+        var fullPrompt = $"<|user|>\n{prompt}<|end|>\n<|assistant|>";
         var sequences = tokenizer.Encode(fullPrompt);
         
         using var generatorParams = new GeneratorParams(model);
@@ -148,7 +148,7 @@ public class Program
         
         while (!generator.IsDone())
         {
-            await Task.Run(() =&gt;
+            await Task.Run(() =>
             {
                 generator.ComputeLogits();
                 generator.GenerateNextToken();
@@ -176,6 +176,6 @@ public class Program
     {
         if (string.IsNullOrEmpty(text)) return "";
         text = text.Replace("\n", " ").Replace("\r", "");
-        return text.Length &lt;= maxLength ? text : text.Substring(0, maxLength) + "...";
+        return text.Length <= maxLength ? text : text.Substring(0, maxLength) + "...";
     }
 }

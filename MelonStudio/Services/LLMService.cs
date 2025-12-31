@@ -8,8 +8,8 @@ namespace MelonStudio.Services
 {
     public class LLMService : IDisposable
     {
-        private Model _model;
-        private Tokenizer _tokenizer;
+        private Model? _model;
+        private Tokenizer? _tokenizer;
         private bool _isInitialized;
 
         public bool IsInitialized => _isInitialized;
