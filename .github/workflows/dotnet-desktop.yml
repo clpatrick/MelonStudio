@@ -29,4 +29,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: MelonStudio-Build
-        path: MelonStudio/bin/Release/net8.0-windows/
+        path: MelonStudio/bin/x64/Release/net8.0-windows/

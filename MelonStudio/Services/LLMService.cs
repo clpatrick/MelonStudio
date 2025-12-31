@@ -43,7 +43,7 @@ namespace MelonStudio.Services
 
         public async IAsyncEnumerable<string> GenerateResponseAsync(string prompt, string systemPrompt = "You are a helpful AI assistant.")
         {
-            if (!_isInitialized)
+            if (!_isInitialized || _tokenizer == null || _model == null)
                 throw new InvalidOperationException("Model not initialized.");
 
             // Construct the full prompt based on typical chat templates (e.g. Phi-3)
