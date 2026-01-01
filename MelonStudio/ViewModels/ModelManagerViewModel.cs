@@ -200,8 +200,17 @@ namespace MelonStudio.ViewModels
             ConversionLog = "";
             StatusMessage = "Converting model...";
 
-            var modelOutputFolder = Path.Combine(OutputFolder, 
-                SelectedModelId.Replace("/", "_").Replace("\\", "_"));
+            var modelName = SelectedModelId.Replace("/", "_").Replace("\\", "_");
+            var modelOutputFolder = Path.Combine(OutputFolder, modelName);
+            
+            // Use temp folder for HuggingFace cache downloads
+            var cacheFolder = Path.Combine(OutputFolder, "temp", modelName);
+            
+            // Ensure cache folder exists
+            if (!Directory.Exists(cacheFolder))
+            {
+                Directory.CreateDirectory(cacheFolder);
+            }
 
             await _modelBuilderService.ConvertModelAsync(
                 SelectedModelId,
@@ -209,7 +218,8 @@ namespace MelonStudio.ViewModels
                 SelectedPrecision,
                 SelectedProvider,
                 EnableCudaGraph,
-                string.IsNullOrWhiteSpace(HuggingFaceToken) ? null : HuggingFaceToken
+                string.IsNullOrWhiteSpace(HuggingFaceToken) ? null : HuggingFaceToken,
+                cacheFolder
             );
         }
 
