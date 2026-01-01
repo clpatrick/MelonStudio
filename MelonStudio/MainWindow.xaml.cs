@@ -116,18 +116,18 @@ namespace MelonStudio
             }
         }
 
-        private void ModelItem_Click(object sender, MouseButtonEventArgs e)
+        private async void ModelItem_Click(object sender, MouseButtonEventArgs e)
         {
             // Double-click to load
-            if (e.ClickCount == 2 && sender is Border border && border.DataContext is ModelInfo model)
+            if (e.ClickCount == 2 && sender is System.Windows.Controls.Border border && border.DataContext is ModelInfo model)
             {
-                LoadModelAndSwitchToChat(model.Path);
+                await LoadModelAndSwitchToChat(model.Path);
             }
         }
 
         private async void LoadModelFromList_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is string path)
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string path)
             {
                 await LoadModelAndSwitchToChat(path);
             }

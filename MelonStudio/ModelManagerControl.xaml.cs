@@ -31,7 +31,7 @@ namespace MelonStudio
 
         private void ModelItem_Click(object sender, MouseButtonEventArgs e)
         {
-            if (sender is Border border && border.DataContext is HuggingFaceModel model)
+            if (sender is System.Windows.Controls.Border border && border.DataContext is HuggingFaceModel model)
             {
                 ViewModel.SelectedModelId = model.Id;
             }
