@@ -6,7 +6,7 @@ using MelonStudio.ViewModels;
 
 namespace MelonStudio
 {
-    public partial class ModelManagerControl : UserControl
+    public partial class ModelManagerControl : System.Windows.Controls.UserControl
     {
         public ModelManagerViewModel ViewModel { get; }
 
