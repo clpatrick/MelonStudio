@@ -143,10 +143,23 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-                                <TextBlock Text="{Binding Content}" 
-                                           TextWrapping="Wrap" 
-                                           Foreground="#D4D4D4"
-                                           MaxWidth="600"/>
+                                <StackPanel MaxWidth="600">
+                                    <!-- Message Content (Selectable) -->
+                                    <TextBox Text="{Binding Content, Mode=OneWay}" 
+                                             TextWrapping="Wrap" 
+                                             Foreground="#D4D4D4"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             IsReadOnly="True"
+                                             Cursor="IBeam"/>
+                                    
+                                    <!-- Metadata (Model + Performance) -->
+                                    <TextBlock Text="{Binding Metadata}" 
+                                               Foreground="#808080" 
+                                               FontSize="10" 
+                                               Margin="0,8,0,0"
+                                               Visibility="{Binding HasMetadata, Converter={StaticResource BoolToVisConverter}}"/>
+                                </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -175,9 +188,10 @@
                                      BorderThickness="0"
                                      Padding="12,10"
                                      VerticalContentAlignment="Center"
-                                     AcceptsReturn="True"
+                                     AcceptsReturn="False"
                                      TextWrapping="Wrap"
-                                     MaxHeight="100"/>
+                                     MaxHeight="100"
+                                     PreviewKeyDown="InputTextBox_PreviewKeyDown"/>
                         </Border>
                         
                         <Button Grid.Column="1" 

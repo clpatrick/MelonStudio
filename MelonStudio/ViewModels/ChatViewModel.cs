@@ -90,19 +90,25 @@ namespace MelonStudio.ViewModels
 
             Messages.Add(new ChatMessage(ChatRole.User, userText));
             
-            var assistantMessage = new ChatMessage(ChatRole.Assistant, "");
+            var assistantMessage = new ChatMessage(ChatRole.Assistant, "", LoadedModelName);
             Messages.Add(assistantMessage);
 
             IsGenerating = true;
             StatusMessage = "Generating...";
 
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int tokenCount = 0;
+
             try
             {
                 await foreach (var token in _llmService.GenerateResponseAsync(userText, _settingsService.SystemPrompt))
                 {
-                    // ChatMessage is now observable, so Content updates will notify UI
                     assistantMessage.Content += token;
+                    tokenCount++;
                 }
+                
+                stopwatch.Stop();
+                assistantMessage.SetPerformanceMetrics(tokenCount, stopwatch.Elapsed.TotalSeconds);
             }
             catch (Exception ex)
             {

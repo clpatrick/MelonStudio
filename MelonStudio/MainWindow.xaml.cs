@@ -74,6 +74,31 @@ namespace MelonStudio
             }
         }
 
+        private void InputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter || e.Key == Key.Return)
+            {
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                {
+                    // Shift+Enter: Insert newline
+                    var textBox = (System.Windows.Controls.TextBox)sender;
+                    var caretIndex = textBox.CaretIndex;
+                    textBox.Text = textBox.Text.Insert(caretIndex, Environment.NewLine);
+                    textBox.CaretIndex = caretIndex + Environment.NewLine.Length;
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Enter: Send message
+                    if (ViewModel.SendMessageCommand.CanExecute(null))
+                    {
+                        ViewModel.SendMessageCommand.Execute(null);
+                    }
+                    e.Handled = true;
+                }
+            }
+        }
+
         // Models View
         private void RefreshLocalModels()
         {
