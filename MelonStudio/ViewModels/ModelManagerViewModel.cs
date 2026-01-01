@@ -20,9 +20,7 @@ namespace MelonStudio.ViewModels
         private string _selectedModelId = "";
 
         [ObservableProperty]
-        private string _outputFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "AI", "Models");
+        private string _outputFolder = @"C:\models";
 
         [ObservableProperty]
         private string _selectedPrecision = "int4";

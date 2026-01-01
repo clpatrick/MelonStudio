@@ -119,6 +119,13 @@ namespace MelonStudio.Services
                 args.Append($"--extra_options {extraOptions.ToString().Trim()}");
             }
 
+            // Ensure parent directory exists (the builder will create the final folder)
+            var parentDir = Path.GetDirectoryName(outputFolder);
+            if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+            {
+                Directory.CreateDirectory(parentDir);
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName = "python",
@@ -126,8 +133,8 @@ namespace MelonStudio.Services
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = outputFolder
+                CreateNoWindow = true
+                // Don't set WorkingDirectory - output folder may not exist yet
             };
 
             OnOutputReceived?.Invoke($"Starting conversion: python {args}");
