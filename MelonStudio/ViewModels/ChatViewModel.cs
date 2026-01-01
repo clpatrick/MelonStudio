@@ -53,6 +53,28 @@ namespace MelonStudio.ViewModels
             }
         }
 
+        public async Task LoadModelFromPathAsync(string modelPath)
+        {
+            try
+            {
+                StatusMessage = $"Loading {System.IO.Path.GetFileName(modelPath)}...";
+                IsGenerating = true;
+                
+                await _llmService.InitializeAsync(modelPath);
+                
+                StatusMessage = $"Loaded: {System.IO.Path.GetFileName(modelPath)}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+                Messages.Add(new ChatMessage(ChatRole.System, $"Failed to load model: {ex.Message}"));
+            }
+            finally
+            {
+                IsGenerating = false;
+            }
+        }
+
         [RelayCommand]
         private async Task SendMessageAsync()
         {

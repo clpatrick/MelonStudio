@@ -84,8 +84,8 @@
                         BorderThickness="0"/>
                 
                 <Button Grid.Column="2" 
-                        Content="Load Model" 
-                        Command="{Binding LoadModelCommand}"
+                        Content="Load Model..." 
+                        Click="LoadModel_Click"
                         Margin="10,0,0,0"
                         Padding="20,10"
                         Background="#5A5A5A"
@@ -93,14 +93,14 @@
                         BorderThickness="0"/>
                 
                 <Button Grid.Column="3" 
-                        Content="⚙ Models" 
+                        Content="⚙ Convert" 
                         Click="OpenModelManager_Click"
                         Margin="10,0,0,0"
                         Padding="20,10"
                         Background="#6C5CE7"
                         Foreground="White"
                         BorderThickness="0"
-                        ToolTip="Open Model Manager"/>
+                        ToolTip="Convert HuggingFace models to ONNX"/>
             </Grid>
         </Border>
         
