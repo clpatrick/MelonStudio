@@ -12,7 +12,19 @@ namespace MelonStudio.Services
         private Tokenizer? _tokenizer;
         private bool _isInitialized;
 
+        // Configurable generation settings
+        private int _maxLength = 8192;
+        private double _temperature = 0.7;
+        private double _topP = 0.9;
+
         public bool IsInitialized => _isInitialized;
+
+        public void UpdateSettings(int maxLength, double temperature, double topP)
+        {
+            _maxLength = maxLength;
+            _temperature = temperature;
+            _topP = topP;
+        }
 
         public async Task InitializeAsync(string modelPath)
         {
@@ -54,7 +66,9 @@ namespace MelonStudio.Services
             var sequences = _tokenizer.Encode(fullPrompt);
 
             using var generatorParams = new GeneratorParams(_model);
-            generatorParams.SetSearchOption("max_length", 8192);  // Total tokens (input + output)
+            generatorParams.SetSearchOption("max_length", _maxLength);
+            generatorParams.SetSearchOption("temperature", _temperature);
+            generatorParams.SetSearchOption("top_p", _topP);
 
             using var generator = new Generator(_model, generatorParams);
             generator.AppendTokenSequences(sequences);

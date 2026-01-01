@@ -11,7 +11,7 @@ namespace MelonStudio.ViewModels
     public partial class ChatViewModel : ObservableObject
     {
         private readonly LLMService _llmService;
-        private readonly SettingsService _settingsService;
+        private AppSettings _settings;
 
         [ObservableProperty]
         private string _inputMessage = string.Empty;
@@ -30,7 +30,13 @@ namespace MelonStudio.ViewModels
         public ChatViewModel()
         {
             _llmService = new LLMService();
-            _settingsService = new SettingsService();
+            _settings = AppSettings.Load();
+        }
+
+        public void UpdateSettings(AppSettings settings)
+        {
+            _settings = settings;
+            _llmService.UpdateSettings(settings.MaxLength, settings.Temperature, settings.TopP);
         }
 
         [RelayCommand]
@@ -101,7 +107,7 @@ namespace MelonStudio.ViewModels
 
             try
             {
-                await foreach (var token in _llmService.GenerateResponseAsync(userText, _settingsService.SystemPrompt))
+                await foreach (var token in _llmService.GenerateResponseAsync(userText, _settings.SystemPrompt))
                 {
                     assistantMessage.Content += token;
                     tokenCount++;

@@ -13,6 +13,12 @@ namespace MelonStudio.Services
         public bool EnableCudaGraph { get; set; } = false; // Not all models support this
         public string LastModelPath { get; set; } = "";
 
+        // Generation settings
+        public int MaxLength { get; set; } = 8192;
+        public double Temperature { get; set; } = 0.7;
+        public double TopP { get; set; } = 0.9;
+        public string SystemPrompt { get; set; } = "You are a helpful AI assistant.";
+
         private static readonly string SettingsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MelonStudio",

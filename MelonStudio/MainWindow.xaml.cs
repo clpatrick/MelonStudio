@@ -23,10 +23,19 @@ namespace MelonStudio
             DataContext = ViewModel;
             
             _settings = AppSettings.Load();
-            ModelsFolderBox.Text = _settings.DefaultOutputFolder;
-            SettingsHfToken.Password = _settings.HuggingFaceToken;
+            LoadSettingsToUI();
             
             MyModelsList.ItemsSource = LocalModels;
+        }
+
+        private void LoadSettingsToUI()
+        {
+            ModelsFolderBox.Text = _settings.DefaultOutputFolder;
+            SettingsHfToken.Password = _settings.HuggingFaceToken;
+            MaxLengthBox.Text = _settings.MaxLength.ToString();
+            TemperatureBox.Text = _settings.Temperature.ToString();
+            TopPBox.Text = _settings.TopP.ToString();
+            SystemPromptBox.Text = _settings.SystemPrompt;
         }
 
         // Navigation
@@ -192,7 +201,19 @@ namespace MelonStudio
         {
             _settings.DefaultOutputFolder = ModelsFolderBox.Text;
             _settings.HuggingFaceToken = SettingsHfToken.Password;
+            
+            if (int.TryParse(MaxLengthBox.Text, out int maxLength))
+                _settings.MaxLength = maxLength;
+            if (double.TryParse(TemperatureBox.Text, out double temp))
+                _settings.Temperature = temp;
+            if (double.TryParse(TopPBox.Text, out double topP))
+                _settings.TopP = topP;
+            _settings.SystemPrompt = SystemPromptBox.Text;
+            
             _settings.Save();
+            
+            // Update ViewModel with new settings
+            ViewModel.UpdateSettings(_settings);
             
             System.Windows.MessageBox.Show("Settings saved!", "MelonStudio", 
                 MessageBoxButton.OK, MessageBoxImage.Information);
