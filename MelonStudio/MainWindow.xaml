@@ -127,57 +127,52 @@
                 </Border>
 
                 <!-- Chat History -->
-                <ListBox Grid.Row="1" x:Name="ChatListBox" 
-                         ItemsSource="{Binding Messages}" 
-                         Background="#1E1E1E"
-                         BorderThickness="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate DataType="{x:Type models:ChatMessage}">
-                            <Border Margin="20,10" Padding="15" CornerRadius="8">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Role}" Value="User">
-                                                <Setter Property="Background" Value="#2D5A7B"/>
-                                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Role}" Value="Assistant">
-                                                <Setter Property="Background" Value="#2D2D2D"/>
-                                                <Setter Property="HorizontalAlignment" Value="Left"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel MaxWidth="600">
-                                    <!-- Message Content (Selectable) -->
-                                    <TextBox Text="{Binding Content, Mode=OneWay}" 
-                                             TextWrapping="Wrap" 
-                                             Foreground="#D4D4D4"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             IsReadOnly="True"
-                                             Cursor="IBeam"/>
-                                    
-                                    <!-- Metadata (Model + Performance) -->
-                                    <TextBlock Text="{Binding Metadata}" 
-                                               Foreground="#808080" 
-                                               FontSize="10" 
-                                               Margin="0,8,0,0"
-                                               Visibility="{Binding HasMetadata, Converter={StaticResource BoolToVisConverter}}"/>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
+                <ScrollViewer Grid.Row="1" 
+                              x:Name="ChatScrollViewer"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Background="#1E1E1E"
+                              CanContentScroll="False">
+                    <ItemsControl ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:ChatMessage}">
+                                <Border Margin="20,10" Padding="15" CornerRadius="8">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Role}" Value="User">
+                                                    <Setter Property="Background" Value="#2D5A7B"/>
+                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Role}" Value="Assistant">
+                                                    <Setter Property="Background" Value="#2D2D2D"/>
+                                                    <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel MaxWidth="600">
+                                        <!-- Message Content (Selectable) -->
+                                        <TextBox Text="{Binding Content, Mode=OneWay}" 
+                                                 TextWrapping="Wrap" 
+                                                 Foreground="#D4D4D4"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 IsReadOnly="True"
+                                                 Cursor="IBeam"/>
+                                        
+                                        <!-- Metadata (Model + Performance) -->
+                                        <TextBlock Text="{Binding Metadata}" 
+                                                   Foreground="#808080" 
+                                                   FontSize="10" 
+                                                   Margin="0,8,0,0"
+                                                   Visibility="{Binding HasMetadata, Converter={StaticResource BoolToVisConverter}}"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <!-- Input Area -->
                 <Border Grid.Row="2" Background="#252526" Padding="20,15">

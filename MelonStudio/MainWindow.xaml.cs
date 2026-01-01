@@ -26,6 +26,15 @@ namespace MelonStudio
             LoadSettingsToUI();
             
             MyModelsList.ItemsSource = LocalModels;
+            
+            // Auto-scroll chat when messages change
+            ViewModel.Messages.CollectionChanged += (s, e) =>
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+                {
+                    ChatScrollViewer.ScrollToEnd();
+                }));
+            };
         }
 
         private void LoadSettingsToUI()
