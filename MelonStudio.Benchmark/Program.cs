@@ -138,9 +138,9 @@ public class Program
         
         using var generatorParams = new GeneratorParams(model);
         generatorParams.SetSearchOption("max_length", 512);
-        generatorParams.SetInputSequences(sequences);
         
         using var generator = new Generator(model, generatorParams);
+        generator.AppendTokenSequences(sequences);
         
         var stopwatch = Stopwatch.StartNew();
         var response = new System.Text.StringBuilder();
@@ -150,7 +150,6 @@ public class Program
         {
             await Task.Run(() =>
             {
-                generator.ComputeLogits();
                 generator.GenerateNextToken();
             });
             

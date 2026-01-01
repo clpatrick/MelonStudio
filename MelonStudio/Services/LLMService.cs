@@ -55,18 +55,15 @@ namespace MelonStudio.Services
 
             using var generatorParams = new GeneratorParams(_model);
             generatorParams.SetSearchOption("max_length", 2048);
-            generatorParams.SetInputSequences(sequences);
-            // generatorParams.SetSearchOption("past_present_share_buffer", false); // Optional tuning
 
             using var generator = new Generator(_model, generatorParams);
+            generator.AppendTokenSequences(sequences);
 
             while (!generator.IsDone())
             {
-                // Compute logits and generate next token
-                // We wrap this in Task.Run to avoid blocking the UI thread during heavy compute
+                // Generate next token (ComputeLogits is now internal to GenerateNextToken)
                 await Task.Run(() => 
                 {
-                    generator.ComputeLogits();
                     generator.GenerateNextToken();
                 });
 
