@@ -53,7 +53,10 @@ namespace MelonStudio.Services
             });
         }
 
-        public async IAsyncEnumerable<string> GenerateResponseAsync(string prompt, string systemPrompt = "You are a helpful AI assistant.")
+        public async IAsyncEnumerable<string> GenerateResponseAsync(
+            string prompt, 
+            string systemPrompt = "You are a helpful AI assistant.",
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (!_isInitialized || _tokenizer == null || _model == null)
                 throw new InvalidOperationException("Model not initialized.");
@@ -75,11 +78,15 @@ namespace MelonStudio.Services
 
             while (!generator.IsDone())
             {
+                // Check for cancellation
+                if (cancellationToken.IsCancellationRequested)
+                    yield break;
+
                 // Generate next token (ComputeLogits is now internal to GenerateNextToken)
                 await Task.Run(() => 
                 {
                     generator.GenerateNextToken();
-                });
+                }, cancellationToken);
 
                 // Decode the new token
                 // Note: GetSequence(0) returns the entire sequence so far or just the new token?

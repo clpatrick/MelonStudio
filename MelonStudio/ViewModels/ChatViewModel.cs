@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -12,6 +13,7 @@ namespace MelonStudio.ViewModels
     {
         private readonly LLMService _llmService;
         private AppSettings _settings;
+        private CancellationTokenSource? _generationCts;
 
         [ObservableProperty]
         private string _inputMessage = string.Empty;
@@ -102,12 +104,19 @@ namespace MelonStudio.ViewModels
             IsGenerating = true;
             StatusMessage = "Generating...";
 
+            // Create new cancellation token for this generation
+            _generationCts?.Dispose();
+            _generationCts = new CancellationTokenSource();
+
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             int tokenCount = 0;
 
             try
             {
-                await foreach (var token in _llmService.GenerateResponseAsync(userText, _settings.SystemPrompt))
+                await foreach (var token in _llmService.GenerateResponseAsync(
+                    userText, 
+                    _settings.SystemPrompt, 
+                    _generationCts.Token))
                 {
                     assistantMessage.Content += token;
                     tokenCount++;
@@ -116,6 +125,12 @@ namespace MelonStudio.ViewModels
                 stopwatch.Stop();
                 assistantMessage.SetPerformanceMetrics(tokenCount, stopwatch.Elapsed.TotalSeconds);
             }
+            catch (OperationCanceledException)
+            {
+                stopwatch.Stop();
+                assistantMessage.SetPerformanceMetrics(tokenCount, stopwatch.Elapsed.TotalSeconds);
+                StatusMessage = "Generation stopped.";
+            }
             catch (Exception ex)
             {
                 Messages.Add(new ChatMessage(ChatRole.System, $"Error generating: {ex.Message}"));
@@ -123,8 +138,16 @@ namespace MelonStudio.ViewModels
             finally
             {
                 IsGenerating = false;
-                StatusMessage = "Ready.";
+                if (StatusMessage == "Generating...")
+                    StatusMessage = "Ready.";
             }
+        }
+
+        [RelayCommand]
+        private void StopGeneration()
+        {
+            _generationCts?.Cancel();
+            StatusMessage = "Stopping...";
         }
     }
 }

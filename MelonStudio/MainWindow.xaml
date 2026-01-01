@@ -178,6 +178,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <Border Background="#3C3C3C" CornerRadius="8" Padding="2">
@@ -194,6 +195,7 @@
                                      PreviewKeyDown="InputTextBox_PreviewKeyDown"/>
                         </Border>
                         
+                        <!-- Send Button (visible when not generating) -->
                         <Button Grid.Column="1" 
                                 Content="➤" 
                                 Command="{Binding SendMessageCommand}"
@@ -203,7 +205,21 @@
                                 Background="#6C5CE7"
                                 Foreground="White"
                                 BorderThickness="0"
-                                ToolTip="Send message"/>
+                                ToolTip="Send message"
+                                Visibility="{Binding IsGenerating, Converter={StaticResource InverseBoolToVisConverter}}"/>
+                        
+                        <!-- Stop Button (visible when generating) -->
+                        <Button Grid.Column="2" 
+                                Content="■ Stop" 
+                                Command="{Binding StopGenerationCommand}"
+                                Margin="10,0,0,0"
+                                Padding="15,10"
+                                FontSize="14"
+                                Background="#DC3545"
+                                Foreground="White"
+                                BorderThickness="0"
+                                ToolTip="Stop generation"
+                                Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisConverter}}"/>
                     </Grid>
                 </Border>
 
