@@ -47,7 +47,7 @@ namespace MelonStudio.ViewModels
                 StatusMessage = "Loading Model... (this may take a moment)";
                 IsGenerating = true;
                 
-                await _llmService.InitializeAsync(_settingsService.ModelPath);
+                await _llmService.InitializeAsync(_settings.LastModelPath);
                 
                 StatusMessage = "Model Loaded via CUDA/TensorRT.";
             }
