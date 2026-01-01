@@ -74,7 +74,7 @@ namespace MelonStudio
             }
         }
 
-        private void InputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        private void InputTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             if (e.Key == Key.Enter || e.Key == Key.Return)
             {
