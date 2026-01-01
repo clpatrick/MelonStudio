@@ -185,7 +185,8 @@
                 <CheckBox Grid.Row="5" 
                           Content="Enable CUDA Graph (faster inference)"
                           IsChecked="{Binding EnableCudaGraph}"
-                          Foreground="#D4D4D4" Margin="0,0,0,15"/>
+                          Foreground="#D4D4D4" Margin="0,0,0,15"
+                          ToolTip="Only works with some models (Phi-3/4 ✓). Other models may fail to load if enabled."/>
 
                 <!-- HuggingFace Token -->
                 <StackPanel Grid.Row="6" Margin="0,0,0,15">
