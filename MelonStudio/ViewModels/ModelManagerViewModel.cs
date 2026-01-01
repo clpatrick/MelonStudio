@@ -12,6 +12,7 @@ namespace MelonStudio.ViewModels
     {
         private readonly HuggingFaceService _huggingFaceService;
         private readonly ModelBuilderService _modelBuilderService;
+        private readonly AppSettings _settings;
 
         [ObservableProperty]
         private string _searchQuery = "";
@@ -61,6 +62,14 @@ namespace MelonStudio.ViewModels
         {
             _huggingFaceService = new HuggingFaceService();
             _modelBuilderService = new ModelBuilderService();
+            
+            // Load saved settings
+            _settings = AppSettings.Load();
+            _huggingFaceToken = _settings.HuggingFaceToken;
+            _outputFolder = _settings.DefaultOutputFolder;
+            _selectedPrecision = _settings.DefaultPrecision;
+            _selectedProvider = _settings.DefaultProvider;
+            _enableCudaGraph = _settings.EnableCudaGraph;
 
             _modelBuilderService.OnOutputReceived += line => 
                 App.Current.Dispatcher.Invoke(() => ConversionLog += line + "\n");
@@ -71,7 +80,18 @@ namespace MelonStudio.ViewModels
                 {
                     IsConverting = false;
                     StatusMessage = success ? "Conversion completed!" : "Conversion failed";
+                    SaveSettings(); // Save settings after conversion
                 });
+        }
+
+        public void SaveSettings()
+        {
+            _settings.HuggingFaceToken = HuggingFaceToken;
+            _settings.DefaultOutputFolder = OutputFolder;
+            _settings.DefaultPrecision = SelectedPrecision;
+            _settings.DefaultProvider = SelectedProvider;
+            _settings.EnableCudaGraph = EnableCudaGraph;
+            _settings.Save();
         }
 
         public async Task InitializeAsync()
