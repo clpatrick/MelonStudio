@@ -13,5 +13,12 @@ namespace MelonStudio
             ViewModel = new ChatViewModel();
             DataContext = ViewModel;
         }
+
+        private void OpenModelManager_Click(object sender, RoutedEventArgs e)
+        {
+            var modelManager = new ModelManagerWindow();
+            modelManager.Owner = this;
+            modelManager.ShowDialog();
+        }
     }
 }

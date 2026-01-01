@@ -43,18 +43,8 @@ public class Program
 
     public static async Task<int> Main(string[] args)
     {
-        if (args.Length == 0)
-        {
-            Console.WriteLine("Usage: dotnet run --project MelonStudio.Benchmark -- <model_path>");
-            Console.WriteLine("Example: dotnet run --project MelonStudio.Benchmark -- \"C:\\AI\\Models\\Phi-3\"");
-            return 1;
-        }
-
-        var modelPath = args[0];
-        var outputPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "benchmarks", "results.json");
-        
-        // Normalize the output path
-        outputPath = Path.GetFullPath(outputPath);
+        var modelPath = args.Length > 0 ? args[0] : @"C:\AI\Models\Phi-3-mini-4k-instruct-onnx";
+        var outputPath = args.Length > 1 ? args[1] : "benchmarks/results.json";
 
         Console.WriteLine("=== MelonStudio Benchmark ===");
         Console.WriteLine($"Model Path: {modelPath}");

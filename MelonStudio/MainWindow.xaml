@@ -60,6 +60,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <TextBox x:Name="InputTextBox"
@@ -90,6 +91,16 @@
                         Background="#5A5A5A"
                         Foreground="White"
                         BorderThickness="0"/>
+                
+                <Button Grid.Column="3" 
+                        Content="⚙ Models" 
+                        Click="OpenModelManager_Click"
+                        Margin="10,0,0,0"
+                        Padding="20,10"
+                        Background="#6C5CE7"
+                        Foreground="White"
+                        BorderThickness="0"
+                        ToolTip="Open Model Manager"/>
             </Grid>
         </Border>
         
