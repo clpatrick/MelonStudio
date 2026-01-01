@@ -10,7 +10,7 @@ namespace MelonStudio.Services
         public string DefaultOutputFolder { get; set; } = @"C:\models";
         public string DefaultPrecision { get; set; } = "int4";
         public string DefaultProvider { get; set; } = "cuda";
-        public bool EnableCudaGraph { get; set; } = true;
+        public bool EnableCudaGraph { get; set; } = false; // Not all models support this
         public string LastModelPath { get; set; } = "";
 
         private static readonly string SettingsPath = Path.Combine(

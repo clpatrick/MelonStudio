@@ -30,7 +30,7 @@ namespace MelonStudio.ViewModels
         private string _selectedProvider = "cuda";
 
         [ObservableProperty]
-        private bool _enableCudaGraph = true;
+        private bool _enableCudaGraph = false;
 
         [ObservableProperty]
         private string _huggingFaceToken = "";
