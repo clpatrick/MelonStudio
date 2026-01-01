@@ -54,7 +54,7 @@ namespace MelonStudio.Services
             var sequences = _tokenizer.Encode(fullPrompt);
 
             using var generatorParams = new GeneratorParams(_model);
-            generatorParams.SetSearchOption("max_length", 2048);
+            generatorParams.SetSearchOption("max_length", 8192);  // Total tokens (input + output)
 
             using var generator = new Generator(_model, generatorParams);
             generator.AppendTokenSequences(sequences);
