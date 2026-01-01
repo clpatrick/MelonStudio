@@ -1,0 +1,9 @@
+{
+    "git.allowNoVerifyCommit": true,
+    "git.confirmNoVerifyCommit": false,
+    "git.confirmEmptyCommits": false,
+    "git.rememberPostCommitCommand": false,
+    "git.autofetch": true,
+    "git.branchProtectionPrompt": "alwaysCommit",
+    "git.closeDiffOnOperation": false
+}
