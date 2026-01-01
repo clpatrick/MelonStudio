@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.ML.OnnxRuntimeGenAI;
 
 namespace MelonStudio.Services
@@ -18,6 +20,7 @@ namespace MelonStudio.Services
         private double _topP = 0.9;
 
         public bool IsInitialized => _isInitialized;
+        public int ModelContextLength { get; private set; } = 0;
 
         public void UpdateSettings(int maxLength, double temperature, double topP)
         {
@@ -26,31 +29,63 @@ namespace MelonStudio.Services
             _topP = topP;
         }
 
-        public async Task InitializeAsync(string modelPath)
+        public async Task<int> InitializeAsync(string modelPath)
         {
-            if (_isInitialized) return;
+            if (_isInitialized) return ModelContextLength;
 
-            await Task.Run(() =>
+            int contextLength = await Task.Run(() =>
             {
                 if (!Directory.Exists(modelPath))
                     throw new DirectoryNotFoundException($"Model directory not found: {modelPath}");
 
+                // Read context length from genai_config.json
+                int ctxLen = ReadContextLengthFromConfig(modelPath);
+
                 // Initialize the model
-                // The library automatically detects config.json in the folder
-                // For TensorRT, we ensure the native libs are present.
-                // If using the .Cuda package, it usually tries CUDA/TensorRT first.
                 try 
                 {
                     _model = new Model(modelPath);
                     _tokenizer = new Tokenizer(_model);
                     _isInitialized = true;
+                    return ctxLen;
                 }
                 catch (Exception ex)
                 {
-                    // Fallback or specific error handling
                     throw new Exception($"Failed to load model from {modelPath}. Ensure ONNX files are present.", ex);
                 }
             });
+
+            ModelContextLength = contextLength;
+            
+            // Auto-set max_length to context_length if context is valid
+            if (contextLength > 0)
+            {
+                _maxLength = contextLength;
+            }
+            
+            return contextLength;
+        }
+
+        private int ReadContextLengthFromConfig(string modelPath)
+        {
+            try
+            {
+                var configPath = Path.Combine(modelPath, "genai_config.json");
+                if (File.Exists(configPath))
+                {
+                    var json = File.ReadAllText(configPath);
+                    using var doc = JsonDocument.Parse(json);
+                    
+                    if (doc.RootElement.TryGetProperty("model", out var modelSection) &&
+                        modelSection.TryGetProperty("context_length", out var ctxLen))
+                    {
+                        return ctxLen.GetInt32();
+                    }
+                }
+            }
+            catch { }
+            
+            return 0; // Unknown
         }
 
         public async IAsyncEnumerable<string> GenerateResponseAsync(
@@ -68,8 +103,13 @@ namespace MelonStudio.Services
 
             var sequences = _tokenizer.Encode(fullPrompt);
 
+            // Ensure max_length doesn't exceed model's context_length
+            var effectiveMaxLength = ModelContextLength > 0 
+                ? Math.Min(_maxLength, ModelContextLength) 
+                : _maxLength;
+
             using var generatorParams = new GeneratorParams(_model);
-            generatorParams.SetSearchOption("max_length", _maxLength);
+            generatorParams.SetSearchOption("max_length", effectiveMaxLength);
             generatorParams.SetSearchOption("temperature", _temperature);
             generatorParams.SetSearchOption("top_p", _topP);
 

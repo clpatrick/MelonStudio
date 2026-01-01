@@ -108,8 +108,15 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         
-                        <TextBlock Text="{Binding LoadedModelName, FallbackValue='No model loaded'}" 
-                                   Foreground="#808080" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding LoadedModelName, FallbackValue='No model loaded'}" 
+                                       Foreground="#D4D4D4"/>
+                            <TextBlock Text=" • " Foreground="#555555"
+                                       Visibility="{Binding ModelContextLength, Converter={StaticResource BoolToVisConverter}}"/>
+                            <TextBlock Text="{Binding ModelContextLength, StringFormat={}{0:N0} ctx}" 
+                                       Foreground="#808080"
+                                       Visibility="{Binding ModelContextLength, Converter={StaticResource BoolToVisConverter}}"/>
+                        </StackPanel>
                         
                         <Button Grid.Column="1" Content="Load Model..."
                                 Click="LoadModel_Click"

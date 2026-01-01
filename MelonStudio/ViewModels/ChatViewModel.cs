@@ -27,6 +27,9 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private string _loadedModelName = "No model loaded";
 
+        [ObservableProperty]
+        private int _modelContextLength = 0;
+
         public ObservableCollection<ChatMessage> Messages { get; } = new();
 
         public ChatViewModel()
@@ -72,10 +75,19 @@ namespace MelonStudio.ViewModels
                 StatusMessage = $"Loading {modelName}...";
                 IsGenerating = true;
                 
-                await _llmService.InitializeAsync(modelPath);
+                var contextLength = await _llmService.InitializeAsync(modelPath);
                 
                 LoadedModelName = modelName;
-                StatusMessage = $"Ready";
+                ModelContextLength = contextLength;
+                
+                if (contextLength > 0)
+                {
+                    StatusMessage = $"Ready (Context: {contextLength:N0} tokens)";
+                }
+                else
+                {
+                    StatusMessage = "Ready";
+                }
             }
             catch (Exception ex)
             {
