@@ -6,123 +6,332 @@
         xmlns:local="clr-namespace:MelonStudio"
         xmlns:models="clr-namespace:MelonStudio.Models"
         mc:Ignorable="d"
-        Title="Local LLM Chat (RTX 4090 Native)" 
-        Height="600" Width="900"
-        Background="#1E1E1E">
+        Title="MelonStudio" 
+        Height="700" Width="1100"
+        Background="#1E1E1E"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <Style x:Key="NavButtonStyle" TargetType="RadioButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="border" Background="Transparent" 
+                                Padding="12" Cursor="Hand"
+                                ToolTip="{TemplateBinding ToolTip}">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#3D3D3D"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#6C5CE7"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="3,0,0,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#2D2D2D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="#808080"/>
+            <Setter Property="FontSize" Value="20"/>
+        </Style>
+    </Window.Resources>
 
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- Chat History -->
-        <ListBox x:Name="ChatListBox" 
-                 ItemsSource="{Binding Messages}" 
-                 Background="#252526"
-                 BorderThickness="0"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 ScrollViewer.VerticalScrollBarVisibility="Auto">
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="{x:Type models:ChatMessage}">
-                    <Grid Margin="10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        
-                        <TextBlock Text="{Binding Role}" 
-                                   FontWeight="Bold" 
-                                   Foreground="#569CD6"
-                                   VerticalAlignment="Top"/>
-                        
-                        <TextBlock Grid.Column="1" 
-                                   Text="{Binding Content}" 
-                                   TextWrapping="Wrap" 
-                                   Foreground="#D4D4D4"
-                                   Margin="10,0,0,0"/>
-                    </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-            <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                </Style>
-            </ListBox.ItemContainerStyle>
-        </ListBox>
-
-        <!-- Input Area -->
-        <Border Grid.Row="1" Background="#333333" Padding="15">
+        <!-- Left Sidebar -->
+        <Border Background="#181818" BorderBrush="#2D2D2D" BorderThickness="0,0,1,0">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                <TextBox x:Name="InputTextBox"
-                         Text="{Binding InputMessage, UpdateSourceTrigger=PropertyChanged}" 
-                         Background="#3C3C3C"
-                         Foreground="#D4D4D4"
-                         BorderBrush="#555555"
-                         Padding="10"
-                         VerticalContentAlignment="Center"
-                         AcceptsReturn="True"
-                         TextWrapping="Wrap"
-                         MaxHeight="100"/>
-                
-                <Button Grid.Column="1" 
-                        Content="Send" 
-                        Command="{Binding SendMessageCommand}"
-                        Margin="10,0,0,0"
-                        Padding="20,10"
-                        Background="#0E639C"
-                        Foreground="White"
-                        BorderThickness="0"/>
-                
-                <Button Grid.Column="2" 
-                        Content="Load Model..." 
-                        Click="LoadModel_Click"
-                        Margin="10,0,0,0"
-                        Padding="20,10"
-                        Background="#5A5A5A"
-                        Foreground="White"
-                        BorderThickness="0"/>
-                
-                <Button Grid.Column="3" 
-                        Content="⚙ Convert" 
-                        Click="OpenModelManager_Click"
-                        Margin="10,0,0,0"
-                        Padding="20,10"
-                        Background="#6C5CE7"
-                        Foreground="White"
-                        BorderThickness="0"
-                        ToolTip="Convert HuggingFace models to ONNX"/>
+                <!-- Logo/App Icon -->
+                <Border Padding="12" Margin="0,0,0,10">
+                    <TextBlock Text="🍈" FontSize="24" HorizontalAlignment="Center"
+                               ToolTip="MelonStudio"/>
+                </Border>
+
+                <!-- Navigation -->
+                <StackPanel Grid.Row="1">
+                    <RadioButton x:Name="NavChat" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="True" GroupName="Nav" 
+                                 Checked="NavChat_Checked" ToolTip="Chat">
+                        <TextBlock Text="💬" FontSize="20"/>
+                    </RadioButton>
+                    
+                    <RadioButton x:Name="NavModels" Style="{StaticResource NavButtonStyle}"
+                                 GroupName="Nav" Checked="NavModels_Checked" ToolTip="My Models">
+                        <TextBlock Text="📁" FontSize="20"/>
+                    </RadioButton>
+                    
+                    <RadioButton x:Name="NavDiscover" Style="{StaticResource NavButtonStyle}"
+                                 GroupName="Nav" Checked="NavDiscover_Checked" ToolTip="Discover">
+                        <TextBlock Text="🔍" FontSize="20"/>
+                    </RadioButton>
+                </StackPanel>
+
+                <!-- Settings at bottom -->
+                <StackPanel Grid.Row="2" Margin="0,0,0,10">
+                    <RadioButton x:Name="NavSettings" Style="{StaticResource NavButtonStyle}"
+                                 GroupName="Nav" Checked="NavSettings_Checked" ToolTip="Settings">
+                        <TextBlock Text="⚙️" FontSize="20"/>
+                    </RadioButton>
+                </StackPanel>
             </Grid>
         </Border>
-        
-        <!-- Status Bar -->
-        <TextBlock Text="{Binding StatusMessage}" 
-                   Grid.Row="1" 
-                   VerticalAlignment="Top" 
-                   HorizontalAlignment="Left" 
-                   Margin="15,-25,0,0" 
-                   FontSize="11" 
-                   Foreground="#808080"/>
-        
-        <!-- Loading Overlay -->
-        <Grid Grid.RowSpan="2" 
-              Background="#80000000" 
-              Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisConverter}}"
-              IsHitTestVisible="False">
-            <TextBlock Text="Generating..." 
-                       HorizontalAlignment="Center" 
-                       VerticalAlignment="Center"
-                       Foreground="White"
-                       FontSize="18"/>
+
+        <!-- Main Content Area -->
+        <Grid Grid.Column="1">
+            <!-- Chat View -->
+            <Grid x:Name="ChatView">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top Bar -->
+                <Border Background="#252526" Padding="15,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Text="{Binding LoadedModelName, FallbackValue='No model loaded'}" 
+                                   Foreground="#808080" VerticalAlignment="Center"/>
+                        
+                        <Button Grid.Column="1" Content="Load Model..."
+                                Click="LoadModel_Click"
+                                Padding="15,6"
+                                Background="#3D3D3D" Foreground="#D4D4D4"
+                                BorderThickness="0"/>
+                    </Grid>
+                </Border>
+
+                <!-- Chat History -->
+                <ListBox Grid.Row="1" x:Name="ChatListBox" 
+                         ItemsSource="{Binding Messages}" 
+                         Background="#1E1E1E"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:ChatMessage}">
+                            <Border Margin="20,10" Padding="15" CornerRadius="8">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Role}" Value="User">
+                                                <Setter Property="Background" Value="#2D5A7B"/>
+                                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Role}" Value="Assistant">
+                                                <Setter Property="Background" Value="#2D2D2D"/>
+                                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding Content}" 
+                                           TextWrapping="Wrap" 
+                                           Foreground="#D4D4D4"
+                                           MaxWidth="600"/>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+
+                <!-- Input Area -->
+                <Border Grid.Row="2" Background="#252526" Padding="20,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Background="#3C3C3C" CornerRadius="8" Padding="2">
+                            <TextBox x:Name="InputTextBox"
+                                     Text="{Binding InputMessage, UpdateSourceTrigger=PropertyChanged}" 
+                                     Background="Transparent"
+                                     Foreground="#D4D4D4"
+                                     BorderThickness="0"
+                                     Padding="12,10"
+                                     VerticalContentAlignment="Center"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MaxHeight="100"/>
+                        </Border>
+                        
+                        <Button Grid.Column="1" 
+                                Content="➤" 
+                                Command="{Binding SendMessageCommand}"
+                                Margin="10,0,0,0"
+                                Padding="15,10"
+                                FontSize="16"
+                                Background="#6C5CE7"
+                                Foreground="White"
+                                BorderThickness="0"
+                                ToolTip="Send message"/>
+                    </Grid>
+                </Border>
+
+                <!-- Status -->
+                <TextBlock Text="{Binding StatusMessage}" 
+                           Grid.Row="2"
+                           VerticalAlignment="Top" 
+                           HorizontalAlignment="Left" 
+                           Margin="20,-5,0,0" 
+                           FontSize="11" 
+                           Foreground="#808080"/>
+            </Grid>
+
+            <!-- My Models View -->
+            <Grid x:Name="ModelsView" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Background="#252526" Padding="20,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Text="My Models" FontSize="18" FontWeight="Bold" 
+                                   Foreground="#D4D4D4" VerticalAlignment="Center"/>
+                        
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="Refresh" Click="RefreshModels_Click"
+                                    Padding="15,6" Margin="0,0,10,0"
+                                    Background="#3D3D3D" Foreground="#D4D4D4"
+                                    BorderThickness="0"/>
+                            <Button Content="Open Folder" Click="OpenModelsFolder_Click"
+                                    Padding="15,6"
+                                    Background="#3D3D3D" Foreground="#D4D4D4"
+                                    BorderThickness="0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <ListBox x:Name="MyModelsList" Grid.Row="1"
+                         Background="#1E1E1E" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#2D2D2D" Margin="10,5" Padding="15" CornerRadius="6"
+                                    Cursor="Hand" MouseLeftButtonDown="ModelItem_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <TextBlock Text="🧠" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                    
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" 
+                                                   Foreground="#D4D4D4" FontWeight="SemiBold" FontSize="14"/>
+                                        <TextBlock Text="{Binding Path}" 
+                                                   Foreground="#808080" FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    
+                                    <Button Grid.Column="2" Content="Load"
+                                            Click="LoadModelFromList_Click"
+                                            Tag="{Binding Path}"
+                                            Padding="15,6"
+                                            Background="#6C5CE7" Foreground="White"
+                                            BorderThickness="0"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Grid>
+
+            <!-- Discover View (HuggingFace Search + Convert) -->
+            <Grid x:Name="DiscoverView" Visibility="Collapsed">
+                <!-- This will be populated with ModelManager content -->
+            </Grid>
+
+            <!-- Settings View -->
+            <Grid x:Name="SettingsView" Visibility="Collapsed">
+                <Border Background="#252526" Margin="20" Padding="30" CornerRadius="8"
+                        VerticalAlignment="Top">
+                    <StackPanel>
+                        <TextBlock Text="Settings" FontSize="18" FontWeight="Bold" 
+                                   Foreground="#D4D4D4" Margin="0,0,0,20"/>
+                        
+                        <TextBlock Text="Models Folder" Foreground="#808080" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ModelsFolderBox" Text="C:\models"
+                                     Background="#3C3C3C" Foreground="#D4D4D4"
+                                     BorderBrush="#555555" Padding="10,8"/>
+                            <Button Grid.Column="1" Content="Browse..."
+                                    Click="BrowseModelsFolder_Click"
+                                    Margin="10,0,0,0" Padding="15,8"
+                                    Background="#5A5A5A" Foreground="White"
+                                    BorderThickness="0"/>
+                        </Grid>
+                        
+                        <TextBlock Text="HuggingFace Token" Foreground="#808080" Margin="0,20,0,5"/>
+                        <PasswordBox x:Name="SettingsHfToken"
+                                     Background="#3C3C3C" Foreground="#D4D4D4"
+                                     BorderBrush="#555555" Padding="10,8"/>
+                        
+                        <Button Content="Save Settings" Click="SaveSettings_Click"
+                                Margin="0,20,0,0" Padding="20,10"
+                                Background="#28A745" Foreground="White"
+                                HorizontalAlignment="Left"
+                                BorderThickness="0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Loading Overlay -->
+            <Grid Background="#80000000" 
+                  Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisConverter}}"
+                  IsHitTestVisible="False">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="🍈" FontSize="48" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Generating..." 
+                               Foreground="White"
+                               FontSize="16" Margin="0,10,0,0"/>
+                </StackPanel>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

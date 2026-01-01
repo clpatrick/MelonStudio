@@ -22,6 +22,9 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private string _statusMessage = "Ready to load model.";
 
+        [ObservableProperty]
+        private string _loadedModelName = "No model loaded";
+
         public ObservableCollection<ChatMessage> Messages { get; } = new();
 
         public ChatViewModel()
@@ -57,12 +60,14 @@ namespace MelonStudio.ViewModels
         {
             try
             {
-                StatusMessage = $"Loading {System.IO.Path.GetFileName(modelPath)}...";
+                var modelName = System.IO.Path.GetFileName(modelPath);
+                StatusMessage = $"Loading {modelName}...";
                 IsGenerating = true;
                 
                 await _llmService.InitializeAsync(modelPath);
                 
-                StatusMessage = $"Loaded: {System.IO.Path.GetFileName(modelPath)}";
+                LoadedModelName = modelName;
+                StatusMessage = $"Ready";
             }
             catch (Exception ex)
             {
