@@ -71,6 +71,14 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private string _selectedSort = "downloads";
 
+        partial void OnSelectedSortChanged(string value)
+        {
+            if (SearchResults.Count > 0)
+            {
+                _ = SearchModelsAsync();
+            }
+        }
+
         // Model details
         [ObservableProperty]
         private HuggingFaceModelDetails? _selectedModelDetails;

@@ -293,12 +293,22 @@
                                        Foreground="#808080" TextWrapping="Wrap"/>
                         </Border>
 
-                        <Button Content="Convert to ONNX" 
-                                Command="{Binding ConvertModelCommand}"
+                        <!-- Convert Button with Size -->
+                        <Button Command="{Binding ConvertModelCommand}"
                                 IsEnabled="{Binding IsConverting, Converter={StaticResource InverseBoolConverter}}"
                                 Padding="15,12" Margin="0,0,0,8"
                                 Background="#28A745" Foreground="White"
-                                FontWeight="Bold" FontSize="14" BorderThickness="0"/>
+                                FontWeight="Bold" FontSize="14" BorderThickness="0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Convert to ONNX"/>
+                                <TextBlock Text=" (" 
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text="{Binding SelectedModelDetails.TotalSizeFormatted}"
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text=")" 
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                            </StackPanel>
+                        </Button>
 
                         <Button Content="Cancel" 
                                 Command="{Binding CancelConversionCommand}"

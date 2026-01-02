@@ -131,11 +131,21 @@ namespace MelonStudio.Services
 
     public class HuggingFaceFile
     {
+        [JsonPropertyName("path")]
+        public string? Path { get; set; }
+
         [JsonPropertyName("rfilename")]
-        public string? Filename { get; set; }
+        public string? RFilename { get; set; }
+
+        public string? Filename => Path ?? RFilename;
 
         [JsonPropertyName("size")]
         public long Size { get; set; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        public bool IsFile => Type == "file" || Type == null;
 
         public string SizeFormatted
         {
@@ -226,9 +236,12 @@ namespace MelonStudio.Services
 
                 var details = await response.Content.ReadFromJsonAsync<HuggingFaceModelDetails>();
                 
-                // Try to get description from README
                 if (details != null)
                 {
+                    // Fetch files with sizes from tree API
+                    details.Siblings = await GetModelFilesAsync(modelId);
+                    
+                    // Try to get description from README
                     details.Description = await GetModelDescriptionAsync(modelId);
                 }
                 
@@ -238,6 +251,23 @@ namespace MelonStudio.Services
             {
                 System.Diagnostics.Debug.WriteLine($"Error fetching model details: {ex.Message}");
                 return null;
+            }
+        }
+
+        public async Task<List<HuggingFaceFile>> GetModelFilesAsync(string modelId)
+        {
+            try
+            {
+                var url = $"{BaseUrl}/models/{modelId}/tree/main";
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var files = await response.Content.ReadFromJsonAsync<List<HuggingFaceFile>>();
+                return files ?? new List<HuggingFaceFile>();
+            }
+            catch
+            {
+                return new List<HuggingFaceFile>();
             }
         }
 
