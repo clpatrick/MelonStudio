@@ -227,6 +227,14 @@
                                    Foreground="#D4D4D4" FontWeight="SemiBold"/>
                     </StackPanel>
 
+                    <!-- Model Format Badge -->
+                    <Border Grid.Row="2" Background="#3D3D3D" CornerRadius="4" Padding="8,4" 
+                            Margin="0,45,0,0" HorizontalAlignment="Left"
+                            Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding SelectedModelDetails.ModelFormat}" 
+                                   Foreground="#D4D4D4" FontSize="12"/>
+                    </Border>
+
                     <!-- Separator -->
                     <Border Grid.Row="3" Height="1" Background="#3D3D3D" Margin="0,20,0,15"/>
 
@@ -293,14 +301,51 @@
                                        Foreground="#808080" TextWrapping="Wrap"/>
                         </Border>
 
-                        <!-- Convert Button with Size -->
+                        <!-- Download Button (for ONNX models) -->
+                        <Button Command="{Binding DownloadOnnxModelCommand}"
+                                IsEnabled="{Binding IsConverting, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="15,12" Margin="0,0,0,8"
+                                Background="#6C5CE7" Foreground="White"
+                                FontWeight="Bold" FontSize="14" BorderThickness="0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedModelDetails.IsOnnxModel}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⬇ Download"/>
+                                <TextBlock Text=" (" 
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text="{Binding SelectedModelDetails.TotalSizeFormatted}"
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text=")" 
+                                           Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Convert Button (for source models) -->
                         <Button Command="{Binding ConvertModelCommand}"
                                 IsEnabled="{Binding IsConverting, Converter={StaticResource InverseBoolConverter}}"
                                 Padding="15,12" Margin="0,0,0,8"
                                 Background="#28A745" Foreground="White"
                                 FontWeight="Bold" FontSize="14" BorderThickness="0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedModelDetails.IsOnnxModel}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Convert to ONNX"/>
+                                <TextBlock Text="🔄 Convert to ONNX"/>
                                 <TextBlock Text=" (" 
                                            Visibility="{Binding SelectedModelDetails, Converter={StaticResource BoolToVis}}"/>
                                 <TextBlock Text="{Binding SelectedModelDetails.TotalSizeFormatted}"

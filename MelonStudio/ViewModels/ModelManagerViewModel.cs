@@ -320,5 +320,101 @@ namespace MelonStudio.ViewModels
                 });
             }
         }
+
+        [RelayCommand]
+        private async Task DownloadOnnxModelAsync()
+        {
+            if (SelectedModelDetails == null || string.IsNullOrWhiteSpace(SelectedModelId))
+            {
+                StatusMessage = "Please select a model first";
+                return;
+            }
+
+            if (!SelectedModelDetails.IsOnnxModel)
+            {
+                StatusMessage = "This model needs conversion, use Convert instead";
+                return;
+            }
+
+            if (!Directory.Exists(OutputFolder))
+            {
+                try
+                {
+                    Directory.CreateDirectory(OutputFolder);
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Cannot create output folder: {ex.Message}";
+                    return;
+                }
+            }
+
+            IsConverting = true;
+            ConversionLog = "";
+            var modelName = SelectedModelId.Replace("/", "_").Replace("\\", "_");
+            var modelOutputFolder = Path.Combine(OutputFolder, modelName);
+
+            StatusMessage = $"Downloading {SelectedModelDetails.DisplayName}...";
+            ConversionLog += $"Downloading ONNX model to: {modelOutputFolder}\n";
+
+            try
+            {
+                // Use huggingface-cli to download the model
+                var tokenArg = string.IsNullOrWhiteSpace(HuggingFaceToken) 
+                    ? "" 
+                    : $"--token {HuggingFaceToken}";
+
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "huggingface-cli",
+                        Arguments = $"download {SelectedModelId} --local-dir \"{modelOutputFolder}\" {tokenArg}",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        App.Current.Dispatcher.Invoke(() => ConversionLog += e.Data + "\n");
+                };
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        App.Current.Dispatcher.Invoke(() => ConversionLog += e.Data + "\n");
+                };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                await Task.Run(() => process.WaitForExit());
+
+                if (process.ExitCode == 0)
+                {
+                    StatusMessage = $"✓ Downloaded to {modelOutputFolder}";
+                    ConversionLog += "\n✓ Download complete!\n";
+                }
+                else
+                {
+                    StatusMessage = "✗ Download failed";
+                    ConversionLog += "\n✗ Download failed\n";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Download error: {ex.Message}";
+                ConversionLog += $"\nError: {ex.Message}\n";
+                ConversionLog += "Make sure huggingface-cli is installed: pip install huggingface_hub\n";
+            }
+            finally
+            {
+                IsConverting = false;
+            }
+        }
     }
 }

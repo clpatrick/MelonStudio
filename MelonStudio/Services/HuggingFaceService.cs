@@ -127,6 +127,34 @@ namespace MelonStudio.Services
                 return $"{totalBytes / 1024.0:0.#} KB";
             }
         }
+
+        // ONNX Detection properties
+        public bool HasOnnxFiles => Siblings?.Any(f => 
+            f.IsFile && f.Filename?.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) == true) == true;
+
+        public bool HasGenAiConfig => Siblings?.Any(f => 
+            f.Filename == "genai_config.json") == true;
+
+        public bool HasPyTorchWeights => Siblings?.Any(f => 
+            f.IsFile && (f.Filename?.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase) == true ||
+                        f.Filename?.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) == true ||
+                        f.Filename == "pytorch_model.bin" ||
+                        f.Filename?.Contains("model.safetensors") == true)) == true;
+
+        public bool IsOnnxModel => HasOnnxFiles || HasGenAiConfig;
+
+        public string ModelFormat
+        {
+            get
+            {
+                if (HasGenAiConfig) return "⚡ ONNX GenAI Ready";
+                if (HasOnnxFiles) return "⚡ ONNX Format";
+                if (HasPyTorchWeights) return "🔧 Needs Conversion";
+                return "❓ Unknown Format";
+            }
+        }
+
+        public string ActionLabel => IsOnnxModel ? "Download" : "Convert to ONNX";
     }
 
     public class HuggingFaceFile
