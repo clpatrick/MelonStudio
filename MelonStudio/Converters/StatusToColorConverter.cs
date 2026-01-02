@@ -23,7 +23,7 @@ namespace MelonStudio.Converters
                     ModelStatus.Failed => "#DC3545",
                     _ => "#808080"
                 };
-                return new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorHex));
+                return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorHex));
             }
             return new SolidColorBrush(Colors.Gray);
         }
