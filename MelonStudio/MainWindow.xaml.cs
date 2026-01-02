@@ -227,12 +227,15 @@ namespace MelonStudio
         // Settings View
         private void BrowseModelsFolder_Click(object sender, RoutedEventArgs e)
         {
-            using var dialog = new System.Windows.Forms.FolderBrowserDialog();
-            dialog.SelectedPath = ModelsFolderBox.Text;
-            
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            var dialog = new Microsoft.Win32.OpenFolderDialog
             {
-                ModelsFolderBox.Text = dialog.SelectedPath;
+                Title = "Select Models Folder",
+                InitialDirectory = ModelsFolderBox.Text
+            };
+            
+            if (dialog.ShowDialog() == true)
+            {
+                ModelsFolderBox.Text = dialog.FolderName;
             }
         }
 

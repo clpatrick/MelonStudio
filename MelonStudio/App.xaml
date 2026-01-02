@@ -4,10 +4,17 @@
              xmlns:converters="clr-namespace:MelonStudio.Converters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
-        <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
-        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter"/>
-        <converters:NullToVisibilityConverter x:Key="NullToVisConverter"/>
-        <converters:EnumToBoolConverter x:Key="EnumToBoolConverter"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
+            <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
+            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter"/>
+            <converters:NullToVisibilityConverter x:Key="NullToVisConverter"/>
+            <converters:EnumToBoolConverter x:Key="EnumToBoolConverter"/>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

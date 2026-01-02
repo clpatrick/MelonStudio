@@ -1,7 +1,6 @@
 using System.Windows;
 using Microsoft.Win32;
 using MelonStudio.ViewModels;
-using System.Windows.Forms;
 
 namespace MelonStudio
 {
@@ -19,13 +18,15 @@ namespace MelonStudio
 
         private void BrowseFolder_Click(object sender, RoutedEventArgs e)
         {
-            using var dialog = new FolderBrowserDialog();
-            dialog.SelectedPath = ViewModel.ModelsFolder;
-            dialog.Description = "Select Models Folder";
-            
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            var dialog = new OpenFolderDialog
             {
-                ViewModel.ModelsFolder = dialog.SelectedPath;
+                Title = "Select Models Folder",
+                InitialDirectory = ViewModel.ModelsFolder
+            };
+            
+            if (dialog.ShowDialog() == true)
+            {
+                ViewModel.ModelsFolder = dialog.FolderName;
                 ViewModel.RefreshModels();
                 ViewModel.SaveSettings();
             }
