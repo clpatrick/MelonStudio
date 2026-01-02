@@ -25,7 +25,7 @@ namespace MelonStudio.Converters
             {
                 return Enum.Parse(targetType, parameter.ToString()!);
             }
-            return Binding.DoNothing;
+            return System.Windows.Data.Binding.DoNothing;
         }
     }
 }
