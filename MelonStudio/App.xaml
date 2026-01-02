@@ -7,5 +7,6 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
         <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter"/>
+        <converters:NullToVisibilityConverter x:Key="NullToVisConverter"/>
     </Application.Resources>
 </Application>
