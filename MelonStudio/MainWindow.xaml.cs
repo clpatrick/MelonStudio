@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MelonStudio.Models;
 using MelonStudio.Services;
 using MelonStudio.ViewModels;
 
@@ -12,7 +13,8 @@ namespace MelonStudio
     public partial class MainWindow : System.Windows.Window
     {
         public ChatViewModel ViewModel { get; }
-        public ObservableCollection<ModelInfo> LocalModels { get; } = new();
+        public ObservableCollection<LocalModelInfo> LocalModels { get; } = new();
+        private LocalModelService? _localModelService;
         
         private readonly AppSettings _settings;
 
@@ -118,7 +120,7 @@ namespace MelonStudio
         }
 
         // Models View
-        private void RefreshLocalModels()
+        private async void RefreshLocalModels()
         {
             LocalModels.Clear();
             var folder = _settings.DefaultOutputFolder;
@@ -127,19 +129,12 @@ namespace MelonStudio
 
             try
             {
-                foreach (var dir in Directory.GetDirectories(folder))
+                _localModelService ??= new LocalModelService(folder);
+                var models = await _localModelService.ScanModelsFolderAsync();
+                
+                foreach (var model in models)
                 {
-                    var name = Path.GetFileName(dir);
-                    if (name.Equals("temp", StringComparison.OrdinalIgnoreCase)) continue;
-
-                    var hasConfig = File.Exists(Path.Combine(dir, "genai_config.json")) ||
-                                    File.Exists(Path.Combine(dir, "config.json"));
-                    var hasOnnx = Directory.GetFiles(dir, "*.onnx", SearchOption.AllDirectories).Length > 0;
-
-                    if (hasConfig || hasOnnx)
-                    {
-                        LocalModels.Add(new ModelInfo { Name = name, Path = dir });
-                    }
+                    LocalModels.Add(model);
                 }
             }
             catch { }
@@ -181,6 +176,24 @@ namespace MelonStudio
             await ViewModel.LoadModelFromPathAsync(path);
             NavChat.IsChecked = true;
             ShowView("Chat");
+        }
+
+        private void ConvertLocalModel_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string path)
+            {
+                // Switch to Discover view and set the model for conversion
+                NavDiscover.IsChecked = true;
+                ShowView("Discover");
+                LoadDiscoverView();
+                
+                // Get the model manager and set up for local conversion
+                if (DiscoverView.Children[0] is ModelManagerControl modelManager)
+                {
+                    var modelName = Path.GetFileName(path);
+                    modelManager.SetLocalModelForConversion(path, modelName);
+                }
+            }
         }
 
         // Discover View

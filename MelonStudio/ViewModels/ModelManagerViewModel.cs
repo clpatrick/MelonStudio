@@ -416,5 +416,25 @@ namespace MelonStudio.ViewModels
                 IsConverting = false;
             }
         }
+
+        // Local model conversion support
+        [ObservableProperty]
+        private string? _localModelPath;
+
+        [ObservableProperty]
+        private bool _isLocalConversion;
+
+        /// <summary>
+        /// Sets up the view for converting a local model that was previously downloaded.
+        /// </summary>
+        public void SetLocalModelForConversion(string modelPath, string modelName)
+        {
+            LocalModelPath = modelPath;
+            IsLocalConversion = true;
+            SelectedModelId = modelName;
+            StatusMessage = $"Ready to convert local model: {modelName}";
+            ConversionLog = $"Local model selected: {modelPath}\n";
+            ConversionLog += "Select precision and provider, then click Convert.\n";
+        }
     }
 }

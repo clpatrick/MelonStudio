@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MelonStudio"
         xmlns:models="clr-namespace:MelonStudio.Models"
+        xmlns:converters="clr-namespace:MelonStudio.Converters"
         mc:Ignorable="d"
         Title="MelonStudio" 
         Height="700" Width="1100"
@@ -271,30 +272,112 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Background="#2D2D2D" Margin="10,5" Padding="15" CornerRadius="6"
-                                    Cursor="Hand" MouseLeftButtonDown="ModelItem_Click">
+                                    ToolTip="{Binding ConversionTooltip}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     
-                                    <TextBlock Text="🧠" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                    <!-- Status Icon -->
+                                    <TextBlock Text="{Binding StatusIcon}" FontSize="20" 
+                                               VerticalAlignment="Center" Margin="0,0,10,0"
+                                               ToolTip="{Binding StatusText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#28A745"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Downloaded">
+                                                        <Setter Property="Foreground" Value="#FFC107"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Converting">
+                                                        <Setter Property="Foreground" Value="#17A2B8"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                        <Setter Property="Foreground" Value="#DC3545"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <!-- Model Icon -->
+                                    <TextBlock Grid.Column="1" Text="🧠" FontSize="24" 
+                                               VerticalAlignment="Center" Margin="0,0,15,0"/>
                                     
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" 
-                                                   Foreground="#D4D4D4" FontWeight="SemiBold" FontSize="14"/>
-                                        <TextBlock Text="{Binding Path}" 
-                                                   Foreground="#808080" FontSize="11"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                    <!-- Model Info -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" 
+                                                       Foreground="#D4D4D4" FontWeight="SemiBold" FontSize="14"/>
+                                            <!-- Format Badge -->
+                                            <Border Background="#3D3D3D" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
+                                                <TextBlock FontSize="10">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} · {1}">
+                                                            <Binding Path="Format"/>
+                                                            <Binding Path="Precision"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                    <TextBlock.Foreground>
+                                                        <Binding Path="Status">
+                                                            <Binding.Converter>
+                                                                <converters:StatusToColorConverter/>
+                                                            </Binding.Converter>
+                                                        </Binding>
+                                                    </TextBlock.Foreground>
+                                                </TextBlock>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                            <TextBlock Text="{Binding SizeFormatted}" 
+                                                       Foreground="#808080" FontSize="11"/>
+                                            <TextBlock Text=" · " Foreground="#555555"/>
+                                            <TextBlock Text="{Binding StatusText}" 
+                                                       Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
                                     </StackPanel>
                                     
-                                    <Button Grid.Column="2" Content="Load"
+                                    <!-- Convert Button (for unconverted models) -->
+                                    <Button Grid.Column="3" Content="Convert"
+                                            Click="ConvertLocalModel_Click"
+                                            Tag="{Binding Path}"
+                                            Padding="15,6" Margin="0,0,10,0"
+                                            Background="#28A745" Foreground="White"
+                                            BorderThickness="0">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CanConvert}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    
+                                    <!-- Load Button (for converted models) -->
+                                    <Button Grid.Column="4" Content="Load"
                                             Click="LoadModelFromList_Click"
                                             Tag="{Binding Path}"
                                             Padding="15,6"
                                             Background="#6C5CE7" Foreground="White"
-                                            BorderThickness="0"/>
+                                            BorderThickness="0">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOnnxReady}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                 </Grid>
                             </Border>
                         </DataTemplate>

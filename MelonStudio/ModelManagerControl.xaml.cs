@@ -52,5 +52,13 @@ namespace MelonStudio
                 ViewModel.SearchModelsCommand.Execute(null);
             }
         }
+
+        /// <summary>
+        /// Sets up the view for converting a local model.
+        /// </summary>
+        public void SetLocalModelForConversion(string modelPath, string modelName)
+        {
+            ViewModel.SetLocalModelForConversion(modelPath, modelName);
+        }
     }
 }
