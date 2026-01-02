@@ -79,6 +79,11 @@
                                  GroupName="Nav" Checked="NavDiscover_Checked" ToolTip="Discover">
                         <TextBlock Text="🔍" FontSize="20"/>
                     </RadioButton>
+                    
+                    <RadioButton x:Name="NavConvert" Style="{StaticResource NavButtonStyle}"
+                                 GroupName="Nav" Checked="NavConvert_Checked" ToolTip="Convert">
+                        <TextBlock Text="🔄" FontSize="20"/>
+                    </RadioButton>
                 </StackPanel>
 
                 <!-- Settings at bottom -->
@@ -393,9 +398,15 @@
                 </ListBox>
             </Grid>
 
+
             <!-- Discover View (HuggingFace Search + Convert) -->
             <Grid x:Name="DiscoverView" Visibility="Collapsed">
                 <!-- This will be populated with ModelManager content -->
+            </Grid>
+
+            <!-- Convert View -->
+            <Grid x:Name="ConvertView" Visibility="Collapsed">
+                <!-- This will be populated with ConvertControl -->
             </Grid>
 
             <!-- Settings View -->

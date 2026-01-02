@@ -67,6 +67,12 @@ namespace MelonStudio
             LoadDiscoverView();
         }
 
+        private void NavConvert_Checked(object sender, RoutedEventArgs e)
+        {
+            ShowView("Convert");
+            LoadConvertView();
+        }
+
         private void NavSettings_Checked(object sender, RoutedEventArgs e)
         {
             ShowView("Settings");
@@ -79,6 +85,7 @@ namespace MelonStudio
             ChatView.Visibility = view == "Chat" ? Visibility.Visible : Visibility.Collapsed;
             ModelsView.Visibility = view == "Models" ? Visibility.Visible : Visibility.Collapsed;
             DiscoverView.Visibility = view == "Discover" ? Visibility.Visible : Visibility.Collapsed;
+            ConvertView.Visibility = view == "Convert" ? Visibility.Visible : Visibility.Collapsed;
             SettingsView.Visibility = view == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -182,16 +189,16 @@ namespace MelonStudio
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string path)
             {
-                // Switch to Discover view and set the model for conversion
-                NavDiscover.IsChecked = true;
-                ShowView("Discover");
-                LoadDiscoverView();
+                // Switch to Convert view and set the model for conversion
+                NavConvert.IsChecked = true;
+                ShowView("Convert");
+                LoadConvertView();
                 
-                // Get the model manager and set up for local conversion
-                if (DiscoverView.Children[0] is ModelManagerControl modelManager)
+                // Get the convert control and set up for local conversion
+                if (ConvertView.Children[0] is ConvertControl convertControl)
                 {
                     var modelName = Path.GetFileName(path);
-                    modelManager.SetLocalModelForConversion(path, modelName);
+                    convertControl.SetModelForConversion(path, modelName);
                 }
             }
         }
@@ -204,6 +211,16 @@ namespace MelonStudio
                 // Embed the ModelManager content into Discover view
                 var modelManager = new ModelManagerControl();
                 DiscoverView.Children.Add(modelManager);
+            }
+        }
+
+        // Convert View
+        private void LoadConvertView()
+        {
+            if (ConvertView.Children.Count == 0)
+            {
+                var convertControl = new ConvertControl();
+                ConvertView.Children.Add(convertControl);
             }
         }
 
