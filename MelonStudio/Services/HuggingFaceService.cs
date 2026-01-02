@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace MelonStudio.Services
 {
@@ -31,10 +32,120 @@ namespace MelonStudio.Services
         [JsonPropertyName("lastModified")]
         public DateTime? LastModified { get; set; }
 
-        public bool IsOnnxCompatible => Tags?.Contains("onnx") == true || 
-                                        Tags?.Contains("onnxruntime") == true;
+        [JsonPropertyName("modelId")]
+        public string? ModelId { get; set; }
+
+        public bool IsOnnxCompatible => Tags?.Any(t => 
+            t.Contains("onnx", StringComparison.OrdinalIgnoreCase)) == true;
+
+        public bool IsCudaCompatible => Tags?.Any(t => 
+            t.Contains("cuda", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("tensorrt", StringComparison.OrdinalIgnoreCase)) == true;
+
+        public bool IsInt4 => Tags?.Any(t => 
+            t.Contains("int4", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("awq", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("gptq", StringComparison.OrdinalIgnoreCase)) == true;
+
+        public bool IsFp16 => Tags?.Any(t => 
+            t.Contains("fp16", StringComparison.OrdinalIgnoreCase) ||
+            t.Contains("float16", StringComparison.OrdinalIgnoreCase)) == true;
 
         public string DisplayName => Id.Contains("/") ? Id.Split('/')[1] : Id;
+        
+        public string DownloadsFormatted => FormatNumber(Downloads);
+        public string LikesFormatted => FormatNumber(Likes);
+        
+        public string LastModifiedFormatted => LastModified.HasValue 
+            ? GetTimeAgo(LastModified.Value) 
+            : "";
+
+        private static string FormatNumber(int num)
+        {
+            if (num >= 1000000) return $"{num / 1000000.0:0.#}M";
+            if (num >= 1000) return $"{num / 1000.0:0.#}K";
+            return num.ToString();
+        }
+
+        private static string GetTimeAgo(DateTime date)
+        {
+            var span = DateTime.UtcNow - date;
+            if (span.TotalDays >= 365) return $"{(int)(span.TotalDays / 365)}y ago";
+            if (span.TotalDays >= 30) return $"{(int)(span.TotalDays / 30)}mo ago";
+            if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d ago";
+            return "today";
+        }
+    }
+
+    public class HuggingFaceModelDetails
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("author")]
+        public string? Author { get; set; }
+
+        [JsonPropertyName("downloads")]
+        public int Downloads { get; set; }
+
+        [JsonPropertyName("likes")]
+        public int Likes { get; set; }
+
+        [JsonPropertyName("tags")]
+        public List<string>? Tags { get; set; }
+
+        [JsonPropertyName("lastModified")]
+        public DateTime? LastModified { get; set; }
+
+        [JsonPropertyName("cardData")]
+        public JsonElement? CardData { get; set; }
+
+        [JsonPropertyName("siblings")]
+        public List<HuggingFaceFile>? Siblings { get; set; }
+
+        public string? Description { get; set; }
+        
+        public string DisplayName => Id.Contains("/") ? Id.Split('/')[1] : Id;
+        
+        public string HuggingFaceUrl => $"https://huggingface.co/{Id}";
+
+        public List<string> QuantizationOptions => Siblings?
+            .Where(f => f.Filename?.EndsWith(".onnx") == true || 
+                        f.Filename?.Contains("int4") == true ||
+                        f.Filename?.Contains("fp16") == true)
+            .Select(f => f.Filename ?? "")
+            .Take(10)
+            .ToList() ?? new List<string>();
+
+        public string TotalSizeFormatted
+        {
+            get
+            {
+                var totalBytes = Siblings?.Sum(f => f.Size) ?? 0;
+                if (totalBytes >= 1073741824) return $"{totalBytes / 1073741824.0:0.##} GB";
+                if (totalBytes >= 1048576) return $"{totalBytes / 1048576.0:0.#} MB";
+                return $"{totalBytes / 1024.0:0.#} KB";
+            }
+        }
+    }
+
+    public class HuggingFaceFile
+    {
+        [JsonPropertyName("rfilename")]
+        public string? Filename { get; set; }
+
+        [JsonPropertyName("size")]
+        public long Size { get; set; }
+
+        public string SizeFormatted
+        {
+            get
+            {
+                if (Size >= 1073741824) return $"{Size / 1073741824.0:0.##} GB";
+                if (Size >= 1048576) return $"{Size / 1048576.0:0.#} MB";
+                return $"{Size / 1024.0:0.#} KB";
+            }
+        }
     }
 
     public class HuggingFaceService
@@ -49,6 +160,12 @@ namespace MelonStudio.Services
             "granite", "nemotron", "smollm", "chatglm", "olmo"
         };
 
+        // Sort options
+        public static readonly string[] SortOptions = new[] 
+        { 
+            "downloads", "likes", "lastModified", "trending" 
+        };
+
         public HuggingFaceService()
         {
             _httpClient = new HttpClient();
@@ -57,28 +174,32 @@ namespace MelonStudio.Services
 
         public async Task<List<HuggingFaceModel>> SearchModelsAsync(
             string query = "",
-            string? author = null,
-            bool textGenerationOnly = true,
-            int limit = 20)
+            string sortBy = "downloads",
+            bool filterOnnx = false,
+            bool filterCuda = false,
+            bool filterInt4 = false,
+            bool filterFp16 = false,
+            int limit = 50)
         {
-            var url = $"{BaseUrl}/models?";
+            var url = $"{BaseUrl}/models?pipeline_tag=text-generation&";
             
+            // Build search query with filters
+            var searchTerms = new List<string>();
             if (!string.IsNullOrWhiteSpace(query))
+                searchTerms.Add(query);
+            if (filterOnnx)
+                searchTerms.Add("onnx");
+            if (filterInt4)
+                searchTerms.Add("int4");
+            if (filterFp16)
+                searchTerms.Add("fp16");
+
+            if (searchTerms.Count > 0)
             {
-                url += $"search={Uri.EscapeDataString(query)}&";
+                url += $"search={Uri.EscapeDataString(string.Join(" ", searchTerms))}&";
             }
 
-            if (!string.IsNullOrWhiteSpace(author))
-            {
-                url += $"author={Uri.EscapeDataString(author)}&";
-            }
-
-            if (textGenerationOnly)
-            {
-                url += "pipeline_tag=text-generation&";
-            }
-
-            url += $"limit={limit}&sort=downloads&direction=-1";
+            url += $"limit={limit}&sort={sortBy}&direction=-1";
 
             try
             {
@@ -95,35 +216,77 @@ namespace MelonStudio.Services
             }
         }
 
-        public async Task<List<HuggingFaceModel>> GetRecommendedModelsAsync()
+        public async Task<HuggingFaceModelDetails?> GetModelDetailsAsync(string modelId)
         {
-            // Get popular models from authors known for ONNX-compatible models
-            var results = new List<HuggingFaceModel>();
+            try
+            {
+                var url = $"{BaseUrl}/models/{modelId}";
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
 
-            // Microsoft models (Phi series)
-            var msModels = await SearchModelsAsync("phi onnx", "microsoft", limit: 10);
-            results.AddRange(msModels);
-
-            // Meta models (Llama)
-            var metaModels = await SearchModelsAsync("llama", "meta-llama", limit: 5);
-            results.AddRange(metaModels);
-
-            // Mistral
-            var mistralModels = await SearchModelsAsync("", "mistralai", limit: 5);
-            results.AddRange(mistralModels);
-
-            // Qwen
-            var qwenModels = await SearchModelsAsync("", "Qwen", limit: 5);
-            results.AddRange(qwenModels);
-
-            return results;
+                var details = await response.Content.ReadFromJsonAsync<HuggingFaceModelDetails>();
+                
+                // Try to get description from README
+                if (details != null)
+                {
+                    details.Description = await GetModelDescriptionAsync(modelId);
+                }
+                
+                return details;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error fetching model details: {ex.Message}");
+                return null;
+            }
         }
 
-        public async Task<List<HuggingFaceModel>> SearchOnnxReadyModelsAsync(string query = "")
+        private async Task<string?> GetModelDescriptionAsync(string modelId)
         {
-            // Search specifically for ONNX models
-            var searchQuery = string.IsNullOrWhiteSpace(query) ? "onnx genai" : $"{query} onnx";
-            return await SearchModelsAsync(searchQuery, limit: 30);
+            try
+            {
+                var url = $"https://huggingface.co/{modelId}/raw/main/README.md";
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    // Extract first paragraph after title
+                    var lines = content.Split('\n');
+                    var descLines = new List<string>();
+                    bool foundContent = false;
+                    
+                    foreach (var line in lines)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) 
+                        {
+                            if (foundContent && descLines.Count > 0) break;
+                            continue;
+                        }
+                        if (line.StartsWith("#")) 
+                        {
+                            foundContent = true;
+                            continue;
+                        }
+                        if (foundContent && !line.StartsWith("[") && !line.StartsWith("!"))
+                        {
+                            descLines.Add(line.Trim());
+                            if (descLines.Count >= 3) break;
+                        }
+                    }
+                    
+                    return string.Join(" ", descLines);
+                }
+            }
+            catch { }
+            
+            return null;
+        }
+
+        public async Task<List<HuggingFaceModel>> GetRecommendedModelsAsync()
+        {
+            // Get popular ONNX-ready text generation models
+            return await SearchModelsAsync("onnx genai", sortBy: "downloads", limit: 30);
         }
 
         public bool IsModelArchitectureSupported(HuggingFaceModel model)

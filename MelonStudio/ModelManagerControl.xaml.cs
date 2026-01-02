@@ -29,11 +29,11 @@ namespace MelonStudio
             }
         }
 
-        private void ModelItem_Click(object sender, MouseButtonEventArgs e)
+        private async void ModelItem_Click(object sender, MouseButtonEventArgs e)
         {
             if (sender is System.Windows.Controls.Border border && border.DataContext is HuggingFaceModel model)
             {
-                ViewModel.SelectedModelId = model.Id;
+                await ViewModel.SelectModelCommand.ExecuteAsync(model);
             }
         }
 
@@ -42,6 +42,14 @@ namespace MelonStudio
             if (sender is PasswordBox pb)
             {
                 ViewModel.HuggingFaceToken = pb.Password;
+            }
+        }
+
+        private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                ViewModel.SearchModelsCommand.Execute(null);
             }
         }
     }

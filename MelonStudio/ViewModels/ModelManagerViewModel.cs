@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MelonStudio.Services;
@@ -53,10 +54,44 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private bool _onnxGenAiAvailable;
 
+        // Filter properties
+        [ObservableProperty]
+        private bool _filterOnnx = true;
+
+        [ObservableProperty]
+        private bool _filterCuda = false;
+
+        [ObservableProperty]
+        private bool _filterInt4 = false;
+
+        [ObservableProperty]
+        private bool _filterFp16 = false;
+
+        // Sort property
+        [ObservableProperty]
+        private string _selectedSort = "downloads";
+
+        // Model details
+        [ObservableProperty]
+        private HuggingFaceModelDetails? _selectedModelDetails;
+
+        [ObservableProperty]
+        private bool _isLoadingDetails;
+
+        [ObservableProperty]
+        private int _resultCount;
+
         public ObservableCollection<HuggingFaceModel> SearchResults { get; } = new();
 
         public string[] PrecisionOptions { get; } = new[] { "fp32", "fp16", "int4" };
         public string[] ProviderOptions { get; } = new[] { "cuda", "dml", "cpu" };
+        public string[] SortOptions { get; } = new[] { "downloads", "likes", "lastModified" };
+        public Dictionary<string, string> SortDisplayNames { get; } = new()
+        {
+            { "downloads", "Most Downloads" },
+            { "likes", "Most Likes" },
+            { "lastModified", "Recently Updated" }
+        };
 
         public ModelManagerViewModel()
         {
@@ -112,7 +147,7 @@ namespace MelonStudio.ViewModels
             }
             else
             {
-                StatusMessage = "Ready to convert models";
+                StatusMessage = "Ready to search and convert models";
                 await LoadRecommendedModelsAsync();
             }
         }
@@ -120,23 +155,29 @@ namespace MelonStudio.ViewModels
         [RelayCommand]
         private async Task SearchModelsAsync()
         {
-            if (string.IsNullOrWhiteSpace(SearchQuery)) return;
-
             IsSearching = true;
             StatusMessage = "Searching...";
             SearchResults.Clear();
+            SelectedModelDetails = null;
 
             try
             {
-                var results = await _huggingFaceService.SearchModelsAsync(SearchQuery);
+                var results = await _huggingFaceService.SearchModelsAsync(
+                    SearchQuery,
+                    SelectedSort,
+                    FilterOnnx,
+                    FilterCuda,
+                    FilterInt4,
+                    FilterFp16,
+                    limit: 50);
+
                 foreach (var model in results)
                 {
-                    if (_huggingFaceService.IsModelArchitectureSupported(model))
-                    {
-                        SearchResults.Add(model);
-                    }
+                    SearchResults.Add(model);
                 }
-                StatusMessage = $"Found {SearchResults.Count} compatible models";
+                
+                ResultCount = SearchResults.Count;
+                StatusMessage = $"Found {ResultCount} models";
             }
             catch (Exception ex)
             {
@@ -152,8 +193,9 @@ namespace MelonStudio.ViewModels
         private async Task LoadRecommendedModelsAsync()
         {
             IsSearching = true;
-            StatusMessage = "Loading recommended models...";
+            StatusMessage = "Loading popular models...";
             SearchResults.Clear();
+            SelectedModelDetails = null;
 
             try
             {
@@ -162,7 +204,8 @@ namespace MelonStudio.ViewModels
                 {
                     SearchResults.Add(model);
                 }
-                StatusMessage = $"Loaded {SearchResults.Count} recommended models";
+                ResultCount = SearchResults.Count;
+                StatusMessage = $"Loaded {ResultCount} popular models";
             }
             catch (Exception ex)
             {
@@ -171,6 +214,26 @@ namespace MelonStudio.ViewModels
             finally
             {
                 IsSearching = false;
+            }
+        }
+
+        [RelayCommand]
+        private async Task SelectModelAsync(HuggingFaceModel model)
+        {
+            SelectedModelId = model.Id;
+            IsLoadingDetails = true;
+            
+            try
+            {
+                SelectedModelDetails = await _huggingFaceService.GetModelDetailsAsync(model.Id);
+            }
+            catch
+            {
+                SelectedModelDetails = null;
+            }
+            finally
+            {
+                IsLoadingDetails = false;
             }
         }
 
@@ -231,17 +294,23 @@ namespace MelonStudio.ViewModels
         }
 
         [RelayCommand]
-        private void SelectModel(HuggingFaceModel model)
-        {
-            SelectedModelId = model.Id;
-            StatusMessage = $"Selected: {model.Id}";
-        }
-
-        [RelayCommand]
         private void BrowseOutputFolder()
         {
             // WPF folder dialog would go here
             // For now, just use the default
+        }
+
+        [RelayCommand]
+        private void OpenModelPage()
+        {
+            if (SelectedModelDetails != null)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = SelectedModelDetails.HuggingFaceUrl,
+                    UseShellExecute = true
+                });
+            }
         }
     }
 }
