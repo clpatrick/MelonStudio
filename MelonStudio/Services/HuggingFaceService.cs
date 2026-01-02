@@ -121,7 +121,8 @@ namespace MelonStudio.Services
         {
             get
             {
-                var totalBytes = Siblings?.Sum(f => f.Size) ?? 0;
+                var totalBytes = Siblings?.Where(f => f.IsFile).Sum(f => f.Size) ?? 0;
+                if (totalBytes <= 0) return "--";
                 if (totalBytes >= 1073741824) return $"{totalBytes / 1073741824.0:0.##} GB";
                 if (totalBytes >= 1048576) return $"{totalBytes / 1048576.0:0.#} MB";
                 return $"{totalBytes / 1024.0:0.#} KB";

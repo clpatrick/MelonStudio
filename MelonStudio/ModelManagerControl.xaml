@@ -89,59 +89,53 @@
             </StackPanel>
 
             <!-- Model List -->
-            <ListBox Grid.Row="3" 
-                     ItemsSource="{Binding SearchResults}"
-                     SelectedItem="{Binding SelectedModel}"
-                     Background="#252526" BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="#2D2D2D" Margin="0,2" Padding="12,10" CornerRadius="6"
-                                Cursor="Hand" MouseLeftButtonDown="ModelItem_Click">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+            <ScrollViewer Grid.Row="3" 
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          CanContentScroll="False"
+                          Background="#252526">
+                <ItemsControl ItemsSource="{Binding SearchResults}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#2D2D2D" Margin="0,2" Padding="12,10" CornerRadius="6"
+                                    Cursor="Hand" MouseLeftButtonDown="ModelItem_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                                <!-- Model ID -->
-                                <TextBlock Text="{Binding Id}" 
-                                           Foreground="#569CD6" FontWeight="SemiBold" FontSize="13"
-                                           TextTrimming="CharacterEllipsis"/>
+                                    <!-- Model ID -->
+                                    <TextBlock Text="{Binding Id}" 
+                                               Foreground="#569CD6" FontWeight="SemiBold" FontSize="13"
+                                               TextTrimming="CharacterEllipsis"/>
                                 
-                                <!-- Stats -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="⬇" Foreground="#808080" Margin="0,0,3,0" FontSize="10"/>
-                                    <TextBlock Text="{Binding DownloadsFormatted}" Foreground="#808080" FontSize="11"/>
-                                    <TextBlock Text=" · ❤" Foreground="#808080" Margin="8,0,3,0" FontSize="10"/>
-                                    <TextBlock Text="{Binding LikesFormatted}" Foreground="#808080" FontSize="11"/>
-                                </StackPanel>
+                                    <!-- Stats -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="⬇" Foreground="#808080" Margin="0,0,3,0" FontSize="10"/>
+                                        <TextBlock Text="{Binding DownloadsFormatted}" Foreground="#808080" FontSize="11"/>
+                                        <TextBlock Text=" · ❤" Foreground="#808080" Margin="8,0,3,0" FontSize="10"/>
+                                        <TextBlock Text="{Binding LikesFormatted}" Foreground="#808080" FontSize="11"/>
+                                    </StackPanel>
 
-                                <!-- Tags and Date -->
-                                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="{Binding PipelineTag}" 
-                                               Foreground="#808080" FontSize="11"/>
-                                    <TextBlock Text=" · " Foreground="#555555"/>
-                                    <TextBlock Text="{Binding LastModifiedFormatted}" 
-                                               Foreground="#606060" FontSize="11"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="Padding" Value="0"/>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-            </ListBox>
+                                    <!-- Tags and Date -->
+                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="{Binding PipelineTag}" 
+                                                   Foreground="#808080" FontSize="11"/>
+                                        <TextBlock Text=" · " Foreground="#555555"/>
+                                        <TextBlock Text="{Binding LastModifiedFormatted}" 
+                                                   Foreground="#606060" FontSize="11"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
 
             <!-- Log Header -->
             <TextBlock Grid.Row="4" Text="Conversion Log" 
