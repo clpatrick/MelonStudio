@@ -151,26 +151,23 @@ namespace MelonStudio.Services
             generatorParams.SetSearchOption("max_length", _maxLength);
             generatorParams.SetSearchOption("temperature", _temperature);
             generatorParams.SetSearchOption("top_p", _topP);
-            generatorParams.SetInputSequences(sequences);
 
             // Note: In Milestone 1, we use standard generation on the full model.
             // True hybrid execution with separate GPU/CPU partitions requires
             // raw ONNX Runtime sessions and manual tensor passing (Milestone 2+).
             using var generator = new Generator(_gpuModel, generatorParams);
-
-            await Task.CompletedTask; // Make async
+            generator.AppendTokenSequences(sequences);
 
             while (!generator.IsDone())
             {
                 if (cancellationToken.IsCancellationRequested)
                     yield break;
 
-                generator.ComputeLogits();
-                generator.GenerateNextToken();
+                await Task.Run(() => generator.GenerateNextToken(), cancellationToken);
 
                 var outputTokens = generator.GetSequence(0);
-                var newToken = outputTokens[outputTokens.Length - 1];
-                var tokenText = _tokenizer.Decode(new ReadOnlySpan<int>(new[] { (int)newToken }));
+                var newToken = (int)outputTokens[outputTokens.Length - 1];
+                var tokenText = _tokenizer.Decode(new[] { newToken });
 
                 yield return tokenText;
             }
