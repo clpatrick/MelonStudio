@@ -4,7 +4,7 @@ using MelonStudio.ViewModels;
 
 namespace MelonStudio
 {
-    public partial class ConvertControl : UserControl
+    public partial class ConvertControl : System.Windows.Controls.UserControl
     {
         public ConvertViewModel ViewModel { get; }
 
