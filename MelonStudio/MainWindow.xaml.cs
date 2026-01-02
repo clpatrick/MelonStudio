@@ -252,10 +252,22 @@ namespace MelonStudio
                 _settings.TopP = topP;
             _settings.SystemPrompt = SystemPromptBox.Text;
             
+            // Check if models folder changed
+            var oldFolder = _localModelService?.ModelsFolder;
+            var newFolder = _settings.DefaultOutputFolder;
+            var folderChanged = oldFolder != newFolder;
+            
             _settings.Save();
             
             // Update ViewModel with new settings
             ViewModel.UpdateSettings(_settings);
+            
+            // Refresh models if folder changed
+            if (folderChanged)
+            {
+                _localModelService = new LocalModelService(newFolder);
+                RefreshLocalModels();
+            }
             
             System.Windows.MessageBox.Show("Settings saved!", "MelonStudio", 
                 MessageBoxButton.OK, MessageBoxImage.Information);

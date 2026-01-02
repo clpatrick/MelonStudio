@@ -22,6 +22,9 @@ namespace MelonStudio.ViewModels
         private bool _isGenerating;
 
         [ObservableProperty]
+        private bool _isLoading;
+
+        [ObservableProperty]
         private string _statusMessage = "Ready to load model.";
 
         [ObservableProperty]
@@ -49,12 +52,12 @@ namespace MelonStudio.ViewModels
         {
             try
             {
-                StatusMessage = "Loading Model... (this may take a moment)";
-                IsGenerating = true;
+                StatusMessage = "Loading model...";
+                IsLoading = true;
                 
                 await _llmService.InitializeAsync(_settings.LastModelPath);
                 
-                StatusMessage = "Model Loaded via CUDA/TensorRT.";
+                StatusMessage = "Model loaded via CUDA/TensorRT.";
             }
             catch (Exception ex)
             {
@@ -63,7 +66,7 @@ namespace MelonStudio.ViewModels
             }
             finally
             {
-                IsGenerating = false;
+                IsLoading = false;
             }
         }
 
@@ -72,8 +75,9 @@ namespace MelonStudio.ViewModels
             try
             {
                 var modelName = System.IO.Path.GetFileName(modelPath);
-                StatusMessage = $"Loading {modelName}...";
-                IsGenerating = true;
+                LoadedModelName = $"Loading {modelName}...";
+                StatusMessage = "Loading model...";
+                IsLoading = true;
                 
                 var contextLength = await _llmService.InitializeAsync(modelPath);
                 
@@ -91,12 +95,13 @@ namespace MelonStudio.ViewModels
             }
             catch (Exception ex)
             {
+                LoadedModelName = "Load failed";
                 StatusMessage = $"Error: {ex.Message}";
                 Messages.Add(new ChatMessage(ChatRole.System, $"Failed to load model: {ex.Message}"));
             }
             finally
             {
-                IsGenerating = false;
+                IsLoading = false;
             }
         }
 

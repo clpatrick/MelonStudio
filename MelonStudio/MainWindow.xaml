@@ -109,12 +109,20 @@
                 <!-- Top Bar -->
                 <Border Background="#252526" Padding="15,10">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Loading indicator -->
+                            <TextBlock Text="⏳ " Foreground="#17A2B8"
+                                       Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisConverter}}"/>
+                            
                             <TextBlock Text="{Binding LoadedModelName, FallbackValue='No model loaded'}" 
                                        Foreground="#D4D4D4"/>
                             <TextBlock Text=" • " Foreground="#555555"
@@ -129,6 +137,14 @@
                                 Padding="15,6"
                                 Background="#3D3D3D" Foreground="#D4D4D4"
                                 BorderThickness="0"/>
+                        
+                        <!-- Loading progress bar -->
+                        <ProgressBar Grid.Row="1" Grid.ColumnSpan="2"
+                                     IsIndeterminate="True"
+                                     Height="3" Margin="0,8,0,-5"
+                                     Foreground="#6C5CE7"
+                                     Background="#3C3C3C"
+                                     Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisConverter}}"/>
                     </Grid>
                 </Border>
 

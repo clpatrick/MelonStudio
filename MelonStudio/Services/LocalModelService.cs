@@ -9,11 +9,11 @@ namespace MelonStudio.Services
 {
     public class LocalModelService
     {
-        private readonly string _modelsFolder;
+        public string ModelsFolder { get; }
 
         public LocalModelService(string modelsFolder)
         {
-            _modelsFolder = modelsFolder;
+            ModelsFolder = modelsFolder;
         }
 
         /// <summary>
@@ -23,12 +23,12 @@ namespace MelonStudio.Services
         {
             var models = new List<LocalModelInfo>();
 
-            if (!Directory.Exists(_modelsFolder))
+            if (!Directory.Exists(ModelsFolder))
                 return models;
 
             await Task.Run(() =>
             {
-                foreach (var dir in Directory.GetDirectories(_modelsFolder))
+                foreach (var dir in Directory.GetDirectories(ModelsFolder))
                 {
                     // Skip temp folder
                     if (Path.GetFileName(dir).Equals("temp", StringComparison.OrdinalIgnoreCase))
