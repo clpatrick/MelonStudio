@@ -60,6 +60,99 @@ namespace MelonStudio.Services
             ? GetTimeAgo(LastModified.Value) 
             : "";
 
+        // Compatibility detection
+        public string CompatibilityStatus
+        {
+            get
+            {
+                var (status, _, _) = GetCompatibilityInfo();
+                return status;
+            }
+        }
+
+        public string CompatibilityIcon
+        {
+            get
+            {
+                var (status, _, _) = GetCompatibilityInfo();
+                return status switch
+                {
+                    "Compatible" => "✓",
+                    "Warning" => "⚠",
+                    "Incompatible" => "✗",
+                    _ => "?"
+                };
+            }
+        }
+
+        public string CompatibilityTooltip
+        {
+            get
+            {
+                var (_, tooltip, _) = GetCompatibilityInfo();
+                return tooltip;
+            }
+        }
+
+        public string CompatibilityColor
+        {
+            get
+            {
+                var (status, _, _) = GetCompatibilityInfo();
+                return status switch
+                {
+                    "Compatible" => "#28A745",
+                    "Warning" => "#FFC107",
+                    "Incompatible" => "#DC3545",
+                    _ => "#808080"
+                };
+            }
+        }
+
+        private (string status, string tooltip, string arch) GetCompatibilityInfo()
+        {
+            var lowerId = Id.ToLowerInvariant();
+            var lowerTags = Tags?.Select(t => t.ToLowerInvariant()).ToList() ?? new List<string>();
+
+            // Supported architectures
+            string[] supportedArchs = { "phi", "llama", "mistral", "qwen", "gemma", "deepseek", 
+                                        "granite", "nemotron", "smollm", "chatglm", "olmo", "gpt-oss", "ernie" };
+            var detectedArch = supportedArchs.FirstOrDefault(a => lowerId.Contains(a)) ?? "";
+
+            // Check for incompatible formats
+            if (lowerId.Contains("mlx-community") || lowerTags.Contains("mlx"))
+                return ("Incompatible", "MLX format (Apple Silicon only) - not compatible with ONNX Runtime", "");
+
+            if (lowerTags.Contains("exl2") || lowerId.Contains("-exl2"))
+                return ("Incompatible", "EXL2 format (ExLlamaV2) - not compatible with ONNX Runtime", "");
+
+            // GGUF handling - quantized GGUF not supported
+            if (lowerTags.Contains("gguf") || lowerId.Contains("-gguf"))
+            {
+                if (lowerId.Contains("f16") || lowerId.Contains("fp16") || lowerId.Contains("f32") || lowerId.Contains("fp32"))
+                    return ("Warning", $"GGUF float16/32 format - can be converted but may have issues. Arch: {detectedArch}", detectedArch);
+                else
+                    return ("Incompatible", "Quantized GGUF format - only float16/32 GGUF is supported for conversion", "");
+            }
+
+            // GPTQ/AWQ - supported via AutoGPTQ/AutoAWQ but with caveats
+            if (lowerTags.Contains("gptq") || lowerId.Contains("-gptq"))
+                return ("Warning", $"GPTQ format - supported via AutoGPTQ if in HuggingFace format. Arch: {detectedArch}", detectedArch);
+
+            if (lowerTags.Contains("awq") || lowerId.Contains("-awq"))
+                return ("Warning", $"AWQ format - supported via AutoAWQ if in HuggingFace format. Arch: {detectedArch}", detectedArch);
+
+            // Already ONNX format
+            if (lowerTags.Contains("onnx") || lowerId.Contains("-onnx") || lowerTags.Contains("onnxruntime"))
+                return ("Compatible", $"ONNX format - ready to download and use directly! Arch: {detectedArch}", detectedArch);
+
+            // Standard PyTorch/SafeTensors
+            if (string.IsNullOrEmpty(detectedArch))
+                return ("Warning", "Unknown architecture - may not be supported by ONNX Runtime GenAI builder", "");
+
+            return ("Compatible", $"PyTorch/SafeTensors format - compatible for conversion. Arch: {detectedArch}", detectedArch);
+        }
+
         private static string FormatNumber(int num)
         {
             if (num >= 1000000) return $"{num / 1000000.0:0.#}M";
@@ -264,53 +357,13 @@ namespace MelonStudio.Services
             }
         }
 
-        // Authors/repos that produce incompatible formats
-        private static readonly string[] IncompatibleAuthors = new[]
-        {
-            "mlx-community",      // Apple MLX format
-            "TheBloke",           // GGUF/GPTQ only
-            "Turboderp",          // EXL2 format
-            "exl2",               // EXL2 format
-            "unsloth",            // Often GGUF
-        };
-
-        // Tags that indicate incompatible formats
-        private static readonly string[] IncompatibleTags = new[]
-        {
-            "gguf",               // llama.cpp format
-            "gptq",               // GPTQ quantization (different format)
-            "awq",                // AWQ quantization (different format)
-            "exl2",               // ExLlamaV2 format
-            "mlx",                // Apple MLX format
-        };
-
         private bool IsCompatibleModel(HuggingFaceModel model)
         {
             if (string.IsNullOrEmpty(model.Id)) return false;
 
-            // Check author
-            var author = model.Id.Contains("/") ? model.Id.Split('/')[0].ToLowerInvariant() : "";
-            if (IncompatibleAuthors.Any(a => author.Contains(a.ToLowerInvariant())))
-                return false;
-
-            // Check for incompatible tags
-            if (model.Tags != null)
-            {
-                var lowerTags = model.Tags.Select(t => t.ToLowerInvariant()).ToList();
-                if (IncompatibleTags.Any(it => lowerTags.Contains(it)))
-                    return false;
-            }
-
-            // Check if model ID contains incompatible format indicators
-            var lowerModelId = model.Id.ToLowerInvariant();
-            if (lowerModelId.Contains("-gguf") || 
-                lowerModelId.Contains("-gptq") || 
-                lowerModelId.Contains("-awq") ||
-                lowerModelId.Contains("-exl2") ||
-                lowerModelId.Contains("-mlx"))
-                return false;
-
-            return true;
+            // Use the model's built-in compatibility detection
+            // Allow Compatible and Warning models, exclude only Incompatible
+            return model.CompatibilityStatus != "Incompatible";
         }
 
         public async Task<HuggingFaceModelDetails?> GetModelDetailsAsync(string modelId)

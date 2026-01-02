@@ -41,6 +41,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <TextBox x:Name="SearchBox"
@@ -50,14 +51,39 @@
                          VerticalContentAlignment="Center"
                          KeyDown="SearchBox_KeyDown"/>
 
-                <Button Grid.Column="1" Content="Search" 
+                <!-- Info Icon with Supported Formats Tooltip -->
+                <TextBlock Grid.Column="1" Text="ⓘ" FontSize="16" Foreground="#808080"
+                           VerticalAlignment="Center" Margin="10,0,0,0" Cursor="Help">
+                    <TextBlock.ToolTip>
+                        <ToolTip MaxWidth="400">
+                            <StackPanel>
+                                <TextBlock Text="Supported Model Formats" FontWeight="Bold" Margin="0,0,0,8"/>
+                                
+                                <TextBlock Text="✓ Compatible (convert/download):" Foreground="#28A745" FontWeight="SemiBold"/>
+                                <TextBlock Text="  • PyTorch/SafeTensors (Phi, Llama, Mistral, Qwen, Gemma, etc.)" Margin="0,2,0,0"/>
+                                <TextBlock Text="  • ONNX format (ready to use)" Margin="0,2,0,8"/>
+                                
+                                <TextBlock Text="⚠ Warning (may work):" Foreground="#FFC107" FontWeight="SemiBold"/>
+                                <TextBlock Text="  • GPTQ/AWQ quantized (via AutoGPTQ/AutoAWQ)" Margin="0,2,0,0"/>
+                                <TextBlock Text="  • GGUF float16/32 only" Margin="0,2,0,8"/>
+                                
+                                <TextBlock Text="✗ Incompatible:" Foreground="#DC3545" FontWeight="SemiBold"/>
+                                <TextBlock Text="  • MLX format (Apple Silicon)" Margin="0,2,0,0"/>
+                                <TextBlock Text="  • EXL2 format (ExLlamaV2)" Margin="0,2,0,0"/>
+                                <TextBlock Text="  • Quantized GGUF (Q4, Q5, Q8, etc.)" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </ToolTip>
+                    </TextBlock.ToolTip>
+                </TextBlock>
+
+                <Button Grid.Column="2" Content="Search" 
                         Command="{Binding SearchModelsCommand}"
                         Margin="10,0,0,0" Padding="20,10"
                         Background="#6C5CE7" Foreground="White"
                         BorderThickness="0"/>
 
                 <!-- Sort Dropdown -->
-                <ComboBox Grid.Column="2" 
+                <ComboBox Grid.Column="3" 
                           ItemsSource="{Binding SortOptions}"
                           SelectedItem="{Binding SelectedSort}"
                           Margin="10,0,0,0" Padding="10,8" Width="140"
@@ -100,9 +126,11 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="#2D2D2D" Margin="0,2" Padding="12,10" CornerRadius="6"
-                                    Cursor="Hand" MouseLeftButtonDown="ModelItem_Click">
+                                    Cursor="Hand" MouseLeftButtonDown="ModelItem_Click"
+                                    ToolTip="{Binding CompatibilityTooltip}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
@@ -111,13 +139,32 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
+                                    <!-- Compatibility Icon -->
+                                    <TextBlock Text="{Binding CompatibilityIcon}" 
+                                               FontSize="14" Margin="0,0,8,0"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#28A745"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CompatibilityStatus}" Value="Warning">
+                                                        <Setter Property="Foreground" Value="#FFC107"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding CompatibilityStatus}" Value="Incompatible">
+                                                        <Setter Property="Foreground" Value="#DC3545"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
                                     <!-- Model ID -->
-                                    <TextBlock Text="{Binding Id}" 
+                                    <TextBlock Grid.Column="1" Text="{Binding Id}" 
                                                Foreground="#569CD6" FontWeight="SemiBold" FontSize="13"
                                                TextTrimming="CharacterEllipsis"/>
                                 
                                     <!-- Stats -->
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="⬇" Foreground="#808080" Margin="0,0,3,0" FontSize="10"/>
                                         <TextBlock Text="{Binding DownloadsFormatted}" Foreground="#808080" FontSize="11"/>
                                         <TextBlock Text=" · ❤" Foreground="#808080" Margin="8,0,3,0" FontSize="10"/>
@@ -125,7 +172,7 @@
                                     </StackPanel>
 
                                     <!-- Tags and Date -->
-                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
                                         <TextBlock Text="{Binding PipelineTag}" 
                                                    Foreground="#808080" FontSize="11"/>
                                         <TextBlock Text=" · " Foreground="#555555"/>
