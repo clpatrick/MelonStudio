@@ -238,7 +238,8 @@ namespace MelonStudio.Services
                 url += $"search={Uri.EscapeDataString(string.Join(" ", searchTerms))}&";
             }
 
-            url += $"limit={limit}&sort={sortBy}&direction=-1";
+            // Request more to allow for filtering
+            url += $"limit={limit * 2}&sort={sortBy}&direction=-1";
 
             try
             {
@@ -246,13 +247,70 @@ namespace MelonStudio.Services
                 response.EnsureSuccessStatusCode();
 
                 var models = await response.Content.ReadFromJsonAsync<List<HuggingFaceModel>>();
-                return models ?? new List<HuggingFaceModel>();
+                if (models == null) return new List<HuggingFaceModel>();
+
+                // Filter out incompatible models
+                var filtered = models
+                    .Where(m => IsCompatibleModel(m))
+                    .Take(limit)
+                    .ToList();
+
+                return filtered;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"HuggingFace API error: {ex.Message}");
                 return new List<HuggingFaceModel>();
             }
+        }
+
+        // Authors/repos that produce incompatible formats
+        private static readonly string[] IncompatibleAuthors = new[]
+        {
+            "mlx-community",      // Apple MLX format
+            "TheBloke",           // GGUF/GPTQ only
+            "Turboderp",          // EXL2 format
+            "exl2",               // EXL2 format
+            "unsloth",            // Often GGUF
+        };
+
+        // Tags that indicate incompatible formats
+        private static readonly string[] IncompatibleTags = new[]
+        {
+            "gguf",               // llama.cpp format
+            "gptq",               // GPTQ quantization (different format)
+            "awq",                // AWQ quantization (different format)
+            "exl2",               // ExLlamaV2 format
+            "mlx",                // Apple MLX format
+        };
+
+        private bool IsCompatibleModel(HuggingFaceModel model)
+        {
+            if (string.IsNullOrEmpty(model.Id)) return false;
+
+            // Check author
+            var author = model.Id.Contains("/") ? model.Id.Split('/')[0].ToLowerInvariant() : "";
+            if (IncompatibleAuthors.Any(a => author.Contains(a.ToLowerInvariant())))
+                return false;
+
+            // Check for incompatible tags
+            if (model.Tags != null)
+            {
+                var lowerTags = model.Tags.Select(t => t.ToLowerInvariant()).ToList();
+                if (IncompatibleTags.Any(it => lowerTags.Contains(it)))
+                    return false;
+            }
+
+            // Check if model ID contains incompatible format indicators
+            var lowerModelId = model.Id.ToLowerInvariant();
+            if (lowerModelId.Contains("-gguf") || 
+                lowerModelId.Contains("-gptq") || 
+                lowerModelId.Contains("-awq") ||
+                lowerModelId.Contains("-exl2") ||
+                lowerModelId.Contains("-mlx"))
+                return false;
+
+            return true;
         }
 
         public async Task<HuggingFaceModelDetails?> GetModelDetailsAsync(string modelId)
