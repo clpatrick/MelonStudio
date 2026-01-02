@@ -5,5 +5,6 @@
     "git.rememberPostCommitCommand": false,
     "git.autofetch": true,
     "git.branchProtectionPrompt": "alwaysCommit",
-    "git.closeDiffOnOperation": false
+    "git.closeDiffOnOperation": false,
+    "interactiveWindow.alwaysScrollOnNewCell": false
 }
