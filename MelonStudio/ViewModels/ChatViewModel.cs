@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,8 +13,10 @@ namespace MelonStudio.ViewModels
     public partial class ChatViewModel : ObservableObject
     {
         private readonly LLMService _llmService;
+        private readonly HybridLLMService _hybridService;
         private AppSettings _settings;
         private CancellationTokenSource? _generationCts;
+        private bool _isUsingHybrid;
 
         [ObservableProperty]
         private string _inputMessage = string.Empty;
@@ -33,64 +36,77 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private int _modelContextLength = 0;
 
+        [ObservableProperty]
+        private string _hybridStatus = "";
+
+        [ObservableProperty]
+        private bool _isHybridMode = false;
+
         public ObservableCollection<ChatMessage> Messages { get; } = new();
 
         public ChatViewModel()
         {
             _llmService = new LLMService();
+            _hybridService = new HybridLLMService();
             _settings = AppSettings.Load();
+
+            // Wire up hybrid service events for diagnostics
+            _hybridService.OnStatusChanged += status => 
+                System.Windows.Application.Current?.Dispatcher.Invoke(() => StatusMessage = status);
+            _hybridService.OnDiagnostic += diag => 
+                System.Diagnostics.Debug.WriteLine($"[Hybrid] {diag}");
         }
 
         public void UpdateSettings(AppSettings settings)
         {
             _settings = settings;
             _llmService.UpdateSettings(settings.MaxLength, settings.Temperature, settings.TopP);
+            _hybridService.UpdateSettings(settings.MaxLength, (float)settings.Temperature, (float)settings.TopP);
         }
 
         [RelayCommand]
         private async Task LoadModelAsync()
         {
-            try
-            {
-                StatusMessage = "Loading model...";
-                IsLoading = true;
-                
-                await _llmService.InitializeAsync(_settings.LastModelPath);
-                
-                StatusMessage = "Model loaded via CUDA/TensorRT.";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Error: {ex.Message}";
-                Messages.Add(new ChatMessage(ChatRole.System, $"Failed to load model: {ex.Message}"));
-            }
-            finally
-            {
-                IsLoading = false;
-            }
+            await LoadModelFromPathAsync(_settings.LastModelPath);
         }
 
         public async Task LoadModelFromPathAsync(string modelPath)
         {
             try
             {
-                var modelName = System.IO.Path.GetFileName(modelPath);
+                var modelName = Path.GetFileName(modelPath);
                 LoadedModelName = $"Loading {modelName}...";
                 StatusMessage = "Loading model...";
                 IsLoading = true;
-                
-                var contextLength = await _llmService.InitializeAsync(modelPath);
-                
-                LoadedModelName = modelName;
-                ModelContextLength = contextLength;
-                
-                if (contextLength > 0)
+
+                // Check if this is a hybrid model
+                if (HybridLLMService.IsHybridModelDirectory(modelPath))
                 {
-                    StatusMessage = $"Ready (Context: {contextLength:N0} tokens)";
+                    // Load as hybrid
+                    await _hybridService.InitializeHybridAsync(modelPath);
+                    
+                    _isUsingHybrid = true;
+                    IsHybridMode = true;
+                    LoadedModelName = $"{modelName} (Hybrid)";
+                    HybridStatus = _hybridService.Summary;
+                    ModelContextLength = 0; // Not available for hybrid yet
+                    
+                    StatusMessage = $"Hybrid: {_hybridService.GpuLayers} GPU + {_hybridService.CpuLayers} CPU layers";
                 }
                 else
                 {
-                    StatusMessage = "Ready";
+                    // Load as standard
+                    var contextLength = await _llmService.InitializeAsync(modelPath);
+                    
+                    _isUsingHybrid = false;
+                    IsHybridMode = false;
+                    LoadedModelName = modelName;
+                    HybridStatus = "";
+                    ModelContextLength = contextLength;
+                    
+                    StatusMessage = contextLength > 0 
+                        ? $"Ready (Context: {contextLength:N0} tokens)"
+                        : "Ready";
                 }
             }
             catch (Exception ex)
@@ -115,11 +131,14 @@ namespace MelonStudio.ViewModels
 
             Messages.Add(new ChatMessage(ChatRole.User, userText));
             
-            var assistantMessage = new ChatMessage(ChatRole.Assistant, "", LoadedModelName);
+            var modelLabel = IsHybridMode 
+                ? $"{LoadedModelName} ({HybridStatus})" 
+                : LoadedModelName;
+            var assistantMessage = new ChatMessage(ChatRole.Assistant, "", modelLabel);
             Messages.Add(assistantMessage);
 
             IsGenerating = true;
-            StatusMessage = "Generating...";
+            StatusMessage = IsHybridMode ? "Generating (hybrid)..." : "Generating...";
 
             // Create new cancellation token for this generation
             _generationCts?.Dispose();
@@ -130,10 +149,24 @@ namespace MelonStudio.ViewModels
 
             try
             {
-                await foreach (var token in _llmService.GenerateResponseAsync(
-                    userText, 
-                    _settings.SystemPrompt, 
-                    _generationCts.Token))
+                IAsyncEnumerable<string> tokenStream;
+                
+                if (_isUsingHybrid)
+                {
+                    tokenStream = _hybridService.GenerateResponseAsync(
+                        userText,
+                        _settings.SystemPrompt,
+                        _generationCts.Token);
+                }
+                else
+                {
+                    tokenStream = _llmService.GenerateResponseAsync(
+                        userText,
+                        _settings.SystemPrompt,
+                        _generationCts.Token);
+                }
+
+                await foreach (var token in tokenStream)
                 {
                     assistantMessage.Content += token;
                     tokenCount++;
@@ -155,8 +188,8 @@ namespace MelonStudio.ViewModels
             finally
             {
                 IsGenerating = false;
-                if (StatusMessage == "Generating...")
-                    StatusMessage = "Ready.";
+                if (StatusMessage.StartsWith("Generating"))
+                    StatusMessage = IsHybridMode ? $"Ready ({HybridStatus})" : "Ready.";
             }
         }
 

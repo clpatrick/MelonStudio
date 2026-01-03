@@ -260,6 +260,166 @@ namespace MelonStudio.Services
         }
 
         /// <summary>
+        /// Export hybrid CPU/GPU partitions using split_model2.py.
+        /// </summary>
+        public async Task ExportHybridPartitionsAsync(
+            string modelNameOrPath,
+            string outputFolder,
+            int gpuLayers,
+            string precision = "fp16",
+            string? huggingFaceToken = null,
+            string? cacheDir = null)
+        {
+            _cts = new CancellationTokenSource();
+            _stderrBuffer.Clear();
+
+            // Find split_model2.py - should be in the project root
+            var scriptPath = FindSplitModelScript();
+            if (string.IsNullOrEmpty(scriptPath))
+            {
+                OnErrorReceived?.Invoke("split_model2.py not found. Cannot create hybrid partitions.");
+                OnCompleted?.Invoke(false);
+                return;
+            }
+
+            var args = new StringBuilder();
+            args.Append($"\"{scriptPath}\" export ");
+            args.Append($"\"{modelNameOrPath}\" ");
+            args.Append($"--split-layer {gpuLayers} ");
+            args.Append($"--output-dir \"{outputFolder}\" ");
+            args.Append($"--precision {precision} ");
+            args.Append("--json ");
+
+            // Set environment variable for HuggingFace token
+            var env = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(huggingFaceToken))
+            {
+                env["HF_TOKEN"] = huggingFaceToken;
+            }
+            if (!string.IsNullOrEmpty(cacheDir))
+            {
+                env["HF_HOME"] = cacheDir;
+            }
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = args.ToString(),
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            foreach (var (key, value) in env)
+            {
+                psi.EnvironmentVariables[key] = value;
+            }
+
+            OnOutputReceived?.Invoke($"Creating hybrid partitions (GPU: {gpuLayers} layers)...");
+            OnOutputReceived?.Invoke($"Script: {scriptPath}");
+            OnOutputReceived?.Invoke($"Output: {outputFolder}");
+            OnOutputReceived?.Invoke("");
+
+            try
+            {
+                _currentProcess = Process.Start(psi);
+                if (_currentProcess == null)
+                {
+                    OnErrorReceived?.Invoke("Failed to start Python process");
+                    OnCompleted?.Invoke(false);
+                    return;
+                }
+
+                var outputTask = ReadStreamAsync(_currentProcess.StandardOutput, line =>
+                {
+                    // Parse JSON diagnostics from split_model2.py
+                    if (line.StartsWith("[DIAG]"))
+                    {
+                        // Extract diagnostic message
+                        OnOutputReceived?.Invoke(line.Substring(7));
+                    }
+                    else
+                    {
+                        OnOutputReceived?.Invoke(line);
+                    }
+                }, _cts.Token);
+
+                var errorTask = ReadStreamAsync(_currentProcess.StandardError, line =>
+                {
+                    var cleaned = CleanPythonOutput(line);
+                    _stderrBuffer.AppendLine(line);
+                    if (!string.IsNullOrWhiteSpace(cleaned))
+                    {
+                        OnErrorReceived?.Invoke(cleaned);
+                    }
+                }, _cts.Token);
+
+                await _currentProcess.WaitForExitAsync(_cts.Token);
+                await Task.WhenAll(outputTask, errorTask);
+
+                var success = _currentProcess.ExitCode == 0;
+
+                if (success)
+                {
+                    OnOutputReceived?.Invoke("");
+                    OnOutputReceived?.Invoke("✓ Hybrid partitions created successfully!");
+                    OnOutputReceived?.Invoke($"  GPU partition: {outputFolder}/gpu_part.onnx");
+                    OnOutputReceived?.Invoke($"  CPU partition: {outputFolder}/cpu_part.onnx");
+                    OnOutputReceived?.Invoke($"  Config: {outputFolder}/hybrid_config.json");
+                }
+                else
+                {
+                    OnOutputReceived?.Invoke("✗ Hybrid partition creation failed");
+                    var diagnostic = AnalyzeError(_stderrBuffer.ToString(), modelNameOrPath);
+                    OnDiagnosticGenerated?.Invoke(diagnostic);
+                }
+
+                OnCompleted?.Invoke(success);
+            }
+            catch (OperationCanceledException)
+            {
+                OnOutputReceived?.Invoke("Export cancelled");
+                OnCompleted?.Invoke(false);
+            }
+            catch (Exception ex)
+            {
+                OnErrorReceived?.Invoke($"Error: {ex.Message}");
+                OnCompleted?.Invoke(false);
+            }
+            finally
+            {
+                _currentProcess = null;
+            }
+        }
+
+        /// <summary>
+        /// Find the split_model2.py script in common locations.
+        /// </summary>
+        private static string? FindSplitModelScript()
+        {
+            // Check possible locations
+            var candidates = new[]
+            {
+                "split_model2.py",  // Current directory
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "split_model2.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "split_model2.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "split_model2.py"),
+            };
+
+            foreach (var path in candidates)
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (File.Exists(fullPath))
+                {
+                    return fullPath;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Clean Python stderr output by removing noise prefixes.
         /// Python writes progress bars, INFO logs, and warnings to stderr.
         /// </summary>

@@ -14,6 +14,13 @@ A native Windows 11 application (WPF/.NET 8) for running local LLMs on NVIDIA RT
   - System prompt customization
   - Auto-scroll with message history
 
+- **Hybrid CPU/GPU Inference** - Run models exceeding GPU VRAM
+  - Split models at layer boundaries (N layers on GPU, rest on CPU)
+  - Automatic hybrid model detection on load
+  - UI slider to configure GPU layer count
+  - Real-time VRAM estimation
+  - Uses raw ONNX Runtime sessions for partition orchestration
+
 - **Model Discovery** - Search HuggingFace for compatible models
   - Filter by ONNX-ready, CUDA, INT4, FP16
   - Sort by downloads, likes, recency
@@ -25,7 +32,7 @@ A native Windows 11 application (WPF/.NET 8) for running local LLMs on NVIDIA RT
   - Support for HuggingFace ID, local path, or existing models
   - Precision options: INT4, FP16, FP32
   - Provider options: CUDA, CPU, DML
-  - Multi-variant support (create GPU + CPU versions)
+  - **Hybrid partition export** - Split models for CPU/GPU execution
   - Enhanced error diagnostics with categorized failures
 
 - **Local Model Management** - Track downloaded/converted models
@@ -39,25 +46,20 @@ A native Windows 11 application (WPF/.NET 8) for running local LLMs on NVIDIA RT
   - HuggingFace token storage
   - Generation parameters
 
-### 🚧 Planned (Priority Order)
+### 🚧 Planned
 
-1. **Multi-Device Inference** - Split model across GPU + CPU
-   - Layer-level offloading
-   - Support for multiple GPUs
-   - Optimized sharding for hybrid execution
-
-2. **Olive Integration** - Advanced optimization
+1. **Olive Integration** - Advanced optimization
    - Dynamic quantization
    - Layer fusion
-   - Custom optimization passes
+
+2. **KV Cache Paging** - Efficient memory for long contexts
+   - Keep recent KV on GPU, older on CPU
+   - Prefetch pages for attention window
 
 3. **Batch Conversion** - Queue multiple models
    - Sequential processing
    - Resume failed conversions
 
-4. **Conversation Management** - Save/load chat history
-   - Export to markdown
-   - Session persistence
 
 ---
 
@@ -108,21 +110,24 @@ dotnet run --project MelonStudio
 MelonStudio/
 ├── MelonStudio/                    # WPF GUI application
 │   ├── ViewModels/                 # MVVM view models
-│   │   ├── ChatViewModel.cs        # Chat conversation logic
+│   │   ├── ChatViewModel.cs        # Chat + hybrid model detection
 │   │   ├── ModelManagerViewModel.cs # HuggingFace search/download
-│   │   └── ConvertViewModel.cs     # Conversion UI logic
+│   │   └── ConvertViewModel.cs     # Conversion + hybrid export UI
 │   ├── Services/                   # Business logic
-│   │   ├── LLMService.cs           # ONNX Runtime GenAI wrapper
+│   │   ├── LLMService.cs           # Standard ONNX Runtime GenAI
+│   │   ├── HybridLLMService.cs     # GPU/CPU partition orchestration
 │   │   ├── HuggingFaceService.cs   # HF API integration
-│   │   ├── ModelBuilderService.cs  # Python builder wrapper
+│   │   ├── ModelBuilderService.cs  # Python builder + hybrid export
 │   │   └── LocalModelService.cs    # Local model scanning
 │   ├── Models/                     # Data models
-│   │   └── LocalModelInfo.cs       # Local model status tracking
+│   │   ├── LocalModelInfo.cs       # Local model status tracking
+│   │   └── HybridConfig.cs         # Hybrid partition config
 │   ├── Converters/                 # WPF value converters
 │   ├── MainWindow.xaml             # Main app window
 │   ├── ModelManagerControl.xaml    # Discover view
-│   └── ConvertControl.xaml         # Convert view
+│   └── ConvertControl.xaml         # Convert view + hybrid controls
 ├── MelonStudio.Benchmark/          # Console benchmark tool
+├── split_model2.py                 # Python script for hybrid export
 ├── benchmarks/                     # Benchmark results
 └── MelonStudio.sln                 # Solution file
 ```
@@ -147,6 +152,20 @@ MelonStudio/
 2. Select "Select from My Models"
 3. Choose model and change precision
 4. Optionally check "Also create CPU variant"
+
+### Create Hybrid Model (GPU + CPU)
+For models exceeding GPU VRAM:
+1. Go to 🔄 Convert
+2. Check **"Enable Hybrid CPU+GPU"**
+3. Use the slider to set how many layers run on GPU
+4. View estimated VRAM usage
+5. Click "Start Conversion" - creates partitioned model
+
+Loading a hybrid model:
+1. Go to 💬 Chat → Load Model
+2. Select the `*_hybrid_*` folder
+3. The app auto-detects hybrid config and loads both partitions
+4. Status bar shows: "Hybrid: N GPU + M CPU layers"
 
 ---
 

@@ -72,6 +72,25 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private ConversionDiagnostic? _lastDiagnostic;
 
+        // Hybrid Mode
+        [ObservableProperty]
+        private bool _enableHybridMode = false;
+
+        [ObservableProperty]
+        private int _gpuLayerCount = 16;
+
+        [ObservableProperty]
+        private int _maxGpuLayers = 32;
+
+        [ObservableProperty]
+        private double _estimatedVramGb = 4.0;
+
+        [ObservableProperty]
+        private double _estimatedCpuGb = 4.0;
+
+        [ObservableProperty]
+        private double _totalModelSizeGb = 8.0;
+
         // Collections
         public ObservableCollection<LocalModelInfo> LocalModels { get; } = new();
         public string[] PrecisionOptions { get; } = new[] { "int4", "fp16", "fp32" };
@@ -216,8 +235,27 @@ namespace MelonStudio.ViewModels
                     cacheDir
                 );
 
-                // Create CPU variant if requested
-                if (CreateCpuVariant && SelectedProvider != "cpu")
+                // Create hybrid partitions if enabled
+                if (EnableHybridMode)
+                {
+                    var hybridOutputPath = Path.Combine(OutputFolder, $"{modelName}_hybrid_{GpuLayerCount}gpu");
+                    ConversionLog += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                    ConversionLog += $"Creating hybrid partitions (GPU: {GpuLayerCount} layers)...\n";
+                    ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+                    await _modelBuilderService.ExportHybridPartitionsAsync(
+                        modelSource,
+                        hybridOutputPath,
+                        GpuLayerCount,
+                        SelectedPrecision,
+                        string.IsNullOrEmpty(HuggingFaceToken) ? null : HuggingFaceToken,
+                        cacheDir
+                    );
+
+                    StatusMessage = $"✓ Hybrid model created: {GpuLayerCount} GPU + {MaxGpuLayers - GpuLayerCount + 1} CPU layers";
+                }
+                // Create CPU variant if requested (only when not in hybrid mode)
+                else if (CreateCpuVariant && SelectedProvider != "cpu")
                 {
                     var cpuOutputPath = Path.Combine(OutputFolder, $"{modelName}_{SelectedPrecision}_cpu");
                     ConversionLog += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
@@ -282,6 +320,52 @@ namespace MelonStudio.ViewModels
         partial void OnSelectedLocalModelChanged(LocalModelInfo? value)
         {
             StartConversionCommand.NotifyCanExecuteChanged();
+        }
+
+        // Hybrid mode property change handlers
+        partial void OnEnableHybridModeChanged(bool value)
+        {
+            if (value)
+            {
+                // When enabling hybrid mode, update estimates based on current model
+                UpdateVramEstimates();
+            }
+        }
+
+        partial void OnGpuLayerCountChanged(int value)
+        {
+            UpdateVramEstimates();
+        }
+
+        /// <summary>
+        /// Updates VRAM estimates based on current GPU/CPU layer split.
+        /// This uses a simplified calculation - actual values come from model analysis.
+        /// </summary>
+        private void UpdateVramEstimates()
+        {
+            if (MaxGpuLayers <= 0) return;
+
+            // Estimate based on layer distribution
+            double gpuRatio = (double)GpuLayerCount / MaxGpuLayers;
+            double cpuRatio = 1.0 - gpuRatio;
+
+            EstimatedVramGb = Math.Round(TotalModelSizeGb * gpuRatio, 2);
+            EstimatedCpuGb = Math.Round(TotalModelSizeGb * cpuRatio, 2);
+        }
+
+        /// <summary>
+        /// Updates model info from analysis results.
+        /// Called when model is analyzed or selected.
+        /// </summary>
+        public void UpdateModelInfo(int totalLayers, double totalSizeGb)
+        {
+            MaxGpuLayers = totalLayers > 1 ? totalLayers - 1 : 1;
+            TotalModelSizeGb = totalSizeGb;
+            
+            // Default to half on GPU
+            GpuLayerCount = MaxGpuLayers / 2;
+            
+            UpdateVramEstimates();
         }
     }
 }
