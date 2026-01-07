@@ -120,12 +120,42 @@ namespace MelonStudio.ViewModels
                 {
                     IsConverting = false;
                     StatusMessage = success ? "✓ Conversion completed!" : "✗ Conversion failed";
+                    
+                    // Save conversion log to file
+                    SaveConversionLog(success);
                 });
             };
             _modelBuilderService.OnDiagnosticGenerated += diagnostic =>
             {
                 App.Current.Dispatcher.Invoke(() => LastDiagnostic = diagnostic);
             };
+        }
+
+        /// <summary>
+        /// Saves the conversion log to a file in the logs folder.
+        /// </summary>
+        private void SaveConversionLog(bool success)
+        {
+            try
+            {
+                var logsFolder = Path.Combine(OutputFolder, "logs");
+                if (!Directory.Exists(logsFolder))
+                {
+                    Directory.CreateDirectory(logsFolder);
+                }
+
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var status = success ? "success" : "failed";
+                var logFileName = $"conversion_{timestamp}_{status}.log";
+                var logPath = Path.Combine(logsFolder, logFileName);
+
+                File.WriteAllText(logPath, ConversionLog);
+                ConversionLog += $"\n📄 Log saved to: {logPath}\n";
+            }
+            catch (Exception ex)
+            {
+                ConversionLog += $"\n⚠ Failed to save log: {ex.Message}\n";
+            }
         }
 
         public async Task LoadLocalModelsAsync()

@@ -10,6 +10,9 @@ using MelonStudio.Models;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntimeGenAI;
+using System.Runtime.Intrinsics;
+using System.Numerics.Tensors; 
+using System.Runtime.InteropServices;
 
 namespace MelonStudio.Services
 {
@@ -19,7 +22,8 @@ namespace MelonStudio.Services
         private InferenceSession? _cpuSession;
         
         // I/O Binding infrastructure for reduced allocation overhead
-        private OrtIoBinding? _gpuIoBinding;
+        private OrtIoBinding? _gpuIoBindingA;
+        private OrtIoBinding? _gpuIoBindingB;
         private OrtIoBinding? _cpuIoBinding;
         private RunOptions? _runOptions;
         
@@ -45,7 +49,9 @@ namespace MelonStudio.Services
         public int GpuLayers => _hybridConfig?.GpuPartition?.NumLayers ?? 0;
         public int CpuLayers => _hybridConfig?.CpuPartition?.NumLayers ?? 0;
         public int TotalLayers => _hybridConfig?.TotalLayers ?? 0;
-        public string Summary => _hybridConfig?.Summary ?? "No model loaded";
+        public string Summary => _hybridConfig == null 
+            ? "No model loaded" 
+            : $"{_hybridConfig.Summary} | Speculation: {SpeculativeHits} Hits / {SpeculativeMisses} Misses ({(SpeculativeHits + SpeculativeMisses > 0 ? (100.0 * SpeculativeHits / (SpeculativeHits + SpeculativeMisses)).ToString("F0") : "0")}%)";
 
         public async Task<bool> InitializeHybridAsync(string partitionDir)
         {
@@ -72,6 +78,7 @@ namespace MelonStudio.Services
                 await Task.Run(() =>
                 {
                     var gpuOptions = new SessionOptions();
+                    gpuOptions.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR;
                     gpuOptions.AppendExecutionProvider_CUDA(0);
                     gpuOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
                     _gpuSession = new InferenceSession(gpuPath, gpuOptions);
@@ -85,8 +92,31 @@ namespace MelonStudio.Services
                 await Task.Run(() =>
                 {
                     var cpuOptions = new SessionOptions();
+                    cpuOptions.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR;
                     cpuOptions.AppendExecutionProvider_CPU(0);
                     cpuOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+                    // Quantization Loading Priority: INT8 (Best Logic) > INT4-HQ > INT4 (Best Speed) > FP16
+                    var int8CpuPath = cpuPath.Replace(".onnx", ".int8.onnx");
+                    var int4HqPath = cpuPath.Replace(".onnx", ".int4_hq.onnx");
+                    var int4CpuPath = cpuPath.Replace(".onnx", ".int4.onnx");
+
+                    if (File.Exists(int8CpuPath))
+                    {
+                         OnStatusChanged?.Invoke($"[Perf] Loading Quantized INT8 CPU Model: {Path.GetFileName(int8CpuPath)}");
+                         cpuPath = int8CpuPath;
+                    }
+                    else if (File.Exists(int4HqPath))
+                    {
+                         OnStatusChanged?.Invoke($"[Perf] Loading High-Quality INT4 CPU Model: {Path.GetFileName(int4HqPath)}");
+                         cpuPath = int4HqPath;
+                    }
+                    else if (File.Exists(int4CpuPath))
+                    {
+                         OnStatusChanged?.Invoke($"[Perf] Loading Quantized INT4 CPU Model: {Path.GetFileName(int4CpuPath)}");
+                         cpuPath = int4CpuPath;
+                    }
+
                     _cpuSession = new InferenceSession(cpuPath, cpuOptions);
                 });
                 OnProgressChanged?.Invoke(0.7);
@@ -97,7 +127,8 @@ namespace MelonStudio.Services
 
                 // Initialize I/O Bindings for reduced per-step allocation
                 OnStatusChanged?.Invoke("Initializing I/O bindings...");
-                _gpuIoBinding = _gpuSession!.CreateIoBinding();
+                _gpuIoBindingA = _gpuSession!.CreateIoBinding();
+                _gpuIoBindingB = _gpuSession!.CreateIoBinding();
                 _cpuIoBinding = _cpuSession!.CreateIoBinding();
                 _runOptions = new RunOptions();
                 OnProgressChanged?.Invoke(1.0);
@@ -221,34 +252,146 @@ namespace MelonStudio.Services
             
             OnDiagnostic?.Invoke($"Starting KV-Cache Generation with I/O Binding. Input Len: {inputIds.Length}");
 
+            // Speculative Pipeline State
+            Task<(Dictionary<string, OrtValue>, Dictionary<string, OrtValue>, List<OrtValue>)>? speculativeGpuTask = null;
+            long speculativeToken = -1;
+            DenseTensor<long>? specInputIdsTensor = null;
+
             try
             {
+                // Reset Diagnostics
+                SpeculativeHits = 0;
+                SpeculativeMisses = 0;
+                
+                // Initialize N-gram State
+                // Note: We DO NOT clear caches here to allow learning across turns!
+                // _bigramCache.Clear(); 
+                // _trigramCache.Clear();
+                
+                InitializeCommonTokenIds();
+                Console.WriteLine($"[Speculation] Predictor State: {_trigramCache.Count} trigrams, {_bigramCache.Count} bigrams known.");
+
                 int tokensGenerated = 0;
+                
                 while (tokensGenerated < _maxLength && !cancellationToken.IsCancellationRequested)
                 {
                     int batchSize = 1;
                     int inputLen = currentInputIds.Length;
                     int totalSequenceLength = pastSequenceLength + inputLen;
 
-                    // Attention Mask: all 1s for (past + current)
+                    // Attention Mask
                     var maskData = Enumerable.Repeat(1L, totalSequenceLength).ToArray();
                     var attentionMaskTensor = new DenseTensor<long>(maskData, new[] { batchSize, totalSequenceLength });
                     
-                    // Position IDs: [pastSequenceLength, pastSequenceLength+1, ...]
+                    // Position IDs
                     var positionIdsData = Enumerable.Range(pastSequenceLength, inputLen).Select(i => (long)i).ToArray();
                     var positionIdsTensor = new DenseTensor<long>(positionIdsData, new[] { batchSize, inputLen });
                     
                     var inputIdsTensor = new DenseTensor<long>(currentInputIds, new[] { batchSize, inputLen });
 
-                    // Run Step
-                    var (nextTokenId, newKvValues) = await RunHybridStepAsync(
-                        inputIdsTensor, attentionMaskTensor, positionIdsTensor, kvCache, pastSequenceLength);
-                    
-                    // Update Cache - dispose old values before replacing
-                    foreach (var kvp in newKvValues)
+                    // 1. Resolve GPU Step
+                    Dictionary<string, OrtValue> interfaceTensors;
+                    Dictionary<string, OrtValue> gpuKv;
+                    List<OrtValue> tempGpuValues;
+
+                    if (speculativeGpuTask != null)
+                    {
+                         // Must await
+                         var result = await speculativeGpuTask;
+                         
+                         bool match = (currentInputIds.Length == 1 && currentInputIds[0] == speculativeToken);
+                         if (match)
+                         {
+                             SpeculativeHits++;
+                             (interfaceTensors, gpuKv, tempGpuValues) = result;
+                         }
+                         else
+                         {
+                             SpeculativeMisses++;
+                             // Cleanup Speculative Results
+                             foreach(var ov in result.Item3) ov.Dispose(); // inputs
+                             // Interface tensors from speculative run
+                             bool wasPinned = (specInputIdsTensor?.Dimensions[1] == 1);
+                             if (!wasPinned) foreach(var kvp in result.Item1) kvp.Value.Dispose();
+                             // Speculative KV outputs
+                             foreach(var kvp in result.Item2) kvp.Value.Dispose();
+
+                             // Re-run GPU Real
+                             (interfaceTensors, gpuKv, tempGpuValues) = await RunGpuStepAsync(
+                                 inputIdsTensor, attentionMaskTensor, positionIdsTensor, kvCache, (tokensGenerated % 2 == 0 ? _gpuIoBindingA! : _gpuIoBindingB!));
+                         }
+                         speculativeGpuTask = null;
+                    }
+                    else
+                    {
+                        (interfaceTensors, gpuKv, tempGpuValues) = await RunGpuStepAsync(
+                            inputIdsTensor, attentionMaskTensor, positionIdsTensor, kvCache, (tokensGenerated % 2 == 0 ? _gpuIoBindingA! : _gpuIoBindingB!));
+                    }
+
+                    // 2. Commit GPU KV
+                    foreach (var kvp in gpuKv)
                     {
                         if (kvCache.TryGetValue(kvp.Key, out var oldValue)) oldValue.Dispose();
                         kvCache[kvp.Key] = kvp.Value;
+                    }
+
+                    // 3. Start CPU
+                    var cpuTask = RunCpuStepAsync(
+                        attentionMaskTensor, positionIdsTensor, interfaceTensors, kvCache, inputLen);
+
+                    // 4. Speculate (Overlap)
+                    if (inputLen == 1 && tokensGenerated < _maxLength - 1)
+                    {
+                        long currentToken = currentInputIds[0];
+                        
+                        // Update N-gram Predictor
+                        UpdateNgramCaches(currentToken);
+
+                        // Predict Next Token
+                        // previous token for trigram is actually _prevToken (shifted in UpdateNgramCaches)
+                        // wait! UpdateNgramCaches shifts the window.
+                        // So after UpdateNgramCaches(current), _lastToken is current, and _prevToken is previous.
+                        // Ideally we want to predict NEXT based on (prev, current).
+                        // Since UpdateNgramCaches sets _lastToken = current, we ask Predict(_prevToken, _lastToken).
+                        
+                        speculativeToken = Predict(_prevToken, _lastToken);
+                        
+                        // Setup Inputs
+                        var specInputIds = new long[] { speculativeToken };
+                        specInputIdsTensor = new DenseTensor<long>(specInputIds, new[] { 1, 1 });
+                        
+                        var specMaskData = Enumerable.Repeat(1L, totalSequenceLength + 1).ToArray();
+                        var specMaskTensor = new DenseTensor<long>(specMaskData, new[] { 1, totalSequenceLength + 1 });
+                        
+                        var specPosData = new long[] { totalSequenceLength };
+                        var specPosTensor = new DenseTensor<long>(specPosData, new[] { 1, 1 });
+                        
+                        speculativeGpuTask = RunGpuStepAsync(
+                            specInputIdsTensor, specMaskTensor, specPosTensor, kvCache, (tokensGenerated % 2 == 0 ? _gpuIoBindingB! : _gpuIoBindingA!));
+                    }
+                    else
+                    {
+                         // Seed N-gram from Prompt
+                         for (int i = 0; i < currentInputIds.Length; i++)
+                         {
+                             UpdateNgramCaches(currentInputIds[i]);
+                         }
+                    }
+
+                    // 5. Wait CPU
+                    var (nextTokenId, cpuKv, tempCpuValues) = await cpuTask;
+
+                    // 6. Cleanup Steps
+                    foreach(var d in tempGpuValues) d.Dispose();
+                    foreach(var d in tempCpuValues) d.Dispose();
+                    bool isPinned = (inputLen == 1);
+                    if (!isPinned) foreach(var kvp in interfaceTensors) kvp.Value.Dispose();
+
+                    // 7. Update CPU KV
+                    foreach (var kvp in cpuKv)
+                    {
+                         if (kvCache.TryGetValue(kvp.Key, out var oldValue)) oldValue.Dispose();
+                         kvCache[kvp.Key] = kvp.Value;
                     }
 
                     if (nextTokenId == null) break;
@@ -257,13 +400,39 @@ namespace MelonStudio.Services
                     var tokenText = _tokenizer.Decode(new[] { (int)nextToken });
                     yield return tokenText;
 
+
                     currentInputIds = new[] { nextToken };
-                    pastSequenceLength = totalSequenceLength; // New past = old past + what we just processed
+                    pastSequenceLength = totalSequenceLength; 
                     tokensGenerated++;
                 }
             }
             finally
             {
+                // Cleanup Speculative Task if orphaned
+                if (speculativeGpuTask != null)
+                {
+                    try 
+                    { 
+                        // We must wait for it to finish to safely dispose ORT values
+                        var result = await speculativeGpuTask;
+                        foreach(var d in result.Item3) d.Dispose();
+                        // Interface Tensors
+                        if (specInputIdsTensor != null)
+                        {
+                            bool wasPinned = (specInputIdsTensor.Dimensions[1] == 1);
+                            if (!wasPinned) foreach(var kvp in result.Item1) kvp.Value.Dispose();
+                        }
+                        else 
+                        {
+                            // Fallback safe disposal
+                            foreach(var kvp in result.Item1) kvp.Value.Dispose();
+                        }
+
+                        foreach(var kvp in result.Item2) kvp.Value.Dispose();
+                    } 
+                    catch { /* Verify exception or ignore */ }
+                }
+
                 foreach (var val in kvCache.Values) val.Dispose();
             }
         }
@@ -272,307 +441,163 @@ namespace MelonStudio.Services
         private Dictionary<string, OrtValue> _pinnedInterfaceValues = new();
         private int _hiddenSize = 3072; // Default for Phi-3.5-mini
 
-        private async Task<(long? NextToken, Dictionary<string, OrtValue> NewKvCache)> RunHybridStepAsync(
-            DenseTensor<long> inputIds,
-            DenseTensor<long> attentionMask,
-            DenseTensor<long> positionIds,
-            Dictionary<string, OrtValue> currentKvCache,
-            int pastSequenceLength)
+        // Speculation State - N-gram Caches
+        private Dictionary<long, long> _bigramCache = new();
+        private Dictionary<(long, long), long> _trigramCache = new();
+        private long _prevToken = -1;
+        private long _lastToken = -1;
+        
+        // Common Token IDs (Phi-3.5 tokenizer)
+        private int _spaceTokenId = -1;
+        private int _newlineTokenId = -1;
+        private bool _tokenIdsInitialized = false;
+        
+        // Sampling RNG (reused to avoid repeated seeding)
+        private readonly Random _samplingRng = new();
+        
+        // Diagnostics
+        public int SpeculativeHits { get; private set; }
+        public int SpeculativeMisses { get; private set; }
+
+        /// <summary>
+        /// Hybrid N-gram + Token Class predictor for speculation.
+        /// </summary>
+        private long Predict(long prevToken, long currentToken)
         {
-            var newKvCache = new Dictionary<string, OrtValue>();
-            var tempOrtValues = new List<OrtValue>(); // Track OrtValues for disposal after binding
+            // 1. Try 3-gram (highest precision)
+            if (prevToken >= 0 && _trigramCache.TryGetValue((prevToken, currentToken), out var triPred))
+                return triPred;
             
-            int inputLen = (int)inputIds.Dimensions[1];
+            // 2. Try 2-gram
+            if (_bigramCache.TryGetValue(currentToken, out var biPred))
+                return biPred;
             
-            // --- GPU Partition with I/O Binding ---
-            _gpuIoBinding!.ClearBoundInputs();
-            _gpuIoBinding.ClearBoundOutputs();
-            
-            // Bind input_ids
-            var inputIdsOrt = OrtValue.CreateTensorValueFromMemory(inputIds.ToArray(), 
-                new long[] { 1, inputIds.Dimensions[1] });
-            tempOrtValues.Add(inputIdsOrt);
-            _gpuIoBinding.BindInput("input_ids", inputIdsOrt);
-            
-            // Bind attention_mask
-            var maskOrt = OrtValue.CreateTensorValueFromMemory(attentionMask.ToArray(), 
-                new long[] { 1, attentionMask.Dimensions[1] });
-            tempOrtValues.Add(maskOrt);
-            _gpuIoBinding.BindInput("attention_mask", maskOrt);
-            
-            // Bind position_ids if needed
-            if (_gpuSession!.InputMetadata.ContainsKey("position_ids"))
+            // 3. Token class heuristics
+            if (_tokenIdsInitialized)
             {
-                var posOrt = OrtValue.CreateTensorValueFromMemory(positionIds.ToArray(), 
-                    new long[] { 1, positionIds.Dimensions[1] });
-                tempOrtValues.Add(posOrt);
-                _gpuIoBinding.BindInput("position_ids", posOrt);
-            }
-
-            // Bind KV cache inputs (circular binding - reuse previous outputs)
-            foreach (var inputName in _hybridConfig!.GpuPartition.Inputs)
-            {
-                if (inputName.StartsWith("past_key_values"))
+                try
                 {
-                    if (currentKvCache.TryGetValue(inputName, out var existingKv))
-                    {
-                        // Circular binding - reuse the OrtValue from previous step
-                        _gpuIoBinding.BindInput(inputName, existingKv);
-                    }
-                    else
-                    {
-                        // First run: EMPTY KV with seq_len=0
-                        var emptyData = Array.Empty<Float16>();
-                        var emptyKv = OrtValue.CreateTensorValueFromMemory(emptyData, new long[] { 1, 32, 0, 96 });
-                        tempOrtValues.Add(emptyKv);
-                        _gpuIoBinding.BindInput(inputName, emptyKv);
-                    }
-                }
-            }
-            
-            // Prepare Interface Tensor Bindings (Pinned Memory Optimization)
-            if (inputLen == 1)
-            {
-                // FAST PATH: Reuse pinned buffers for single-token generation
-                foreach (var outputName in _hybridConfig.InterfaceTensors.Values)
-                {
-                    if (!_pinnedInterfaceValues.ContainsKey(outputName))
-                    {
-                         // Allocate Pinned Memory: [1, 1, HiddenSize]
-                         // We use Array.Empty or new[3072] but CreateTensorValueFromMemory PINS it.
-                         // Phi-3.5 hidden_size is 3072. We assume this based on inspection.
-                         // TODO: Dynamically detect hidden_size if possible.
-                         var pinnedData = new Float16[_hiddenSize];
-                         var pinnedOrt = OrtValue.CreateTensorValueFromMemory(pinnedData, new long[] { 1, 1, _hiddenSize });
-                         _pinnedInterfaceValues[outputName] = pinnedOrt;
-                    }
-                    // Bind as Output for GPU
-                    _gpuIoBinding.BindOutput(outputName, _pinnedInterfaceValues[outputName]);
-                }
-            }
-            else
-            {
-                // SLOW PATH: Prefill or batch > 1. Let ORT allocate (OutputToDevice).
-                // Clear any existing pinned buffers to be safe (or keep them?)
-                // We keep them re-usable for later decode steps.
-                foreach (var outputName in _hybridConfig.InterfaceTensors.Values)
-                {
-                     // Do NOT bind output. ORT will allocate device/host memory as needed.
-                     _gpuIoBinding.BindOutputToDevice(outputName, OrtMemoryInfo.DefaultInstance); 
-                }
-            }
-            
-            // Bind other outputs (KV cache) to device
-            foreach (var outputName in _hybridConfig.GpuPartition.Outputs)
-            {
-                // Skip interface tensors if we already bound them
-                if (_hybridConfig.InterfaceTensors.ContainsValue(outputName) && inputLen == 1) continue;
-                
-                _gpuIoBinding.BindOutputToDevice(outputName, OrtMemoryInfo.DefaultInstance);
-            }
-
-            _gpuIoBinding.SynchronizeBoundInputs();
-            
-            // OnDiagnostic?.Invoke($"GPU IoBinding: ids={inputIds.Dimensions[1]}, mask={attentionMask.Dimensions[1]}, past={pastSequenceLength}");
-
-            // Run GPU with binding
-            IDisposableReadOnlyCollection<OrtValue> gpuResults;
-            await Task.Run(() => 
-            {
-                _gpuSession.RunWithBinding(_runOptions!, _gpuIoBinding);
-            });
-            gpuResults = _gpuIoBinding.GetOutputValues();
-            _gpuIoBinding.SynchronizeBoundOutputs();
-            
-            // Process GPU outputs
-            var gpuOutputList = gpuResults.ToList();
-            var capturedInterfaceTensors = new Dictionary<string, OrtValue>();
-            
-            // Mapping logic for outputs
-            // NOTE: If we bound Interface Tensors explicitly (Fast Path), they might NOT be in gpuResults list depending on ORT version/flags.
-            // Check if they are. GetOutputValues() usually returns all bound outputs.
-            // BUT, if we provided the buffer, we have the OrtValue in _pinnedInterfaceValues.
-            
-            // We iterate _hybridConfig.GpuPartition.Outputs to be deterministic
-            for (int i = 0; i < gpuOutputList.Count; i++)
-            {
-                var outputName = _hybridConfig.GpuPartition.Outputs[i];
-                var ortValue = gpuOutputList[i];
-                
-                if (outputName.StartsWith("present"))
-                {
-                    var pastName = outputName.Replace("present.", "past_key_values.");
-                    newKvCache[pastName] = ortValue; // Store for circular binding
-                }
-                else if (_hybridConfig.InterfaceTensors.ContainsValue(outputName))
-                {
-                    if (inputLen == 1)
-                    {
-                        // Fast Path: We used our pinned buffer.
-                        // The 'ortValue' returned might be a reference to the same buffer.
-                        // We rely on _pinnedInterfaceValues[outputName] for CPU binding.
-                        // We should NOT dispose the one in _pinnedInterfaceValues.
-                        // But 'ortValue' from GetOutputValues might need disposal if it's a separate handle?
-                        // Actually, if we bound it, GetOutputValues returns the bound OrtValue.
-                        // We stored it in _pinnedInterfaceValues.
-                        // We track it in capturedInterfaceTensors to facilitate the CPU loop below.
-                        capturedInterfaceTensors[outputName] = ortValue; 
-                    }
-                    else
-                    {
-                        // Slow Path: ORT allocated it. We capture it normally.
-                        capturedInterfaceTensors[outputName] = ortValue;
-                    }
-                }
-                else
-                {
-                   // Unused output
-                   ortValue.Dispose();
-                }
-            }
-            
-            foreach (var ov in tempOrtValues) ov.Dispose();
-            tempOrtValues.Clear();
-
-            // --- CPU Partition with I/O Binding ---
-            _cpuIoBinding!.ClearBoundInputs();
-            _cpuIoBinding.ClearBoundOutputs();
-            
-            // Bind attention_mask (reuse from above, need fresh OrtValue)
-            var cpuMaskOrt = OrtValue.CreateTensorValueFromMemory(attentionMask.ToArray(), 
-                new long[] { 1, attentionMask.Dimensions[1] });
-            tempOrtValues.Add(cpuMaskOrt);
-            _cpuIoBinding.BindInput("attention_mask", cpuMaskOrt);
-            
-            // Bind position_ids if needed
-            if (_cpuSession!.InputMetadata.ContainsKey("position_ids"))
-            {
-                var cpuPosOrt = OrtValue.CreateTensorValueFromMemory(positionIds.ToArray(), 
-                    new long[] { 1, positionIds.Dimensions[1] });
-                tempOrtValues.Add(cpuPosOrt);
-                _cpuIoBinding.BindInput("position_ids", cpuPosOrt);
-            }
-            
-            // Bind interface tensors from GPU
-            foreach(var kvp in capturedInterfaceTensors)
-            {
-                 // Fast Path: This 'kvp.Value' is our Pinned _pinnedInterfaceValues[...]
-                 // Slow Path: This is a device tensor (that needs copy?).
-                 // If Slow Path (prefill), 'kvp.Value' is typically Device Memory (GPU).
-                 // CPU Session cannot read GPU memory directly typically.
-                 // ORT handles the copy if we bind it as input.
-                 // Pinned Memory Win: In Fast Path, it is Host Pinned Memory. CPU can read it directly!
-                _cpuIoBinding.BindInput(kvp.Key, kvp.Value);
-            }
-            
-            // Bind CPU KV cache inputs
-            foreach (var inputName in _hybridConfig.CpuPartition.Inputs)
-            {
-                if (inputName.StartsWith("past_key_values"))
-                {
-                    if (currentKvCache.TryGetValue(inputName, out var existingKv))
-                    {
-                        _cpuIoBinding.BindInput(inputName, existingKv);
-                    }
-                    else
-                    {
-                        var emptyData = Array.Empty<Float16>();
-                        var emptyKv = OrtValue.CreateTensorValueFromMemory(emptyData, new long[] { 1, 32, 0, 96 });
-                        tempOrtValues.Add(emptyKv);
-                        _cpuIoBinding.BindInput(inputName, emptyKv);
-                    }
-                }
-            }
-            
-            // Bind CPU outputs to device
-            foreach (var outputName in _hybridConfig.CpuPartition.Outputs)
-            {
-                _cpuIoBinding.BindOutputToDevice(outputName, OrtMemoryInfo.DefaultInstance);
-            }
-            
-            _cpuIoBinding.SynchronizeBoundInputs();
-            
-            // Run CPU
-            IDisposableReadOnlyCollection<OrtValue> cpuResults;
-            await Task.Run(() =>
-            {
-                _cpuSession.RunWithBinding(_runOptions!, _cpuIoBinding);
-            });
-            cpuResults = _cpuIoBinding.GetOutputValues();
-            _cpuIoBinding.SynchronizeBoundOutputs();
-            
-            // Process CPU outputs
-            var cpuOutputList = cpuResults.ToList();
-            long? nextTokenId = null;
-            
-            for (int i = 0; i < cpuOutputList.Count; i++)
-            {
-                var outputName = _hybridConfig.CpuPartition.Outputs[i];
-                var ortValue = cpuOutputList[i];
-                
-                if (outputName.StartsWith("present"))
-                {
-                    var pastName = outputName.Replace("present.", "past_key_values.");
-                    newKvCache[pastName] = ortValue;
-                }
-                else if (outputName == "logits")
-                {
-                    // Extract logits data using GetTensorDataAsSpan
-                    var typeInfo = ortValue.GetTensorTypeAndShape();
-                    var vocabSize = (int)typeInfo.Shape[2];
-                    var lastTokenIndex = (int)inputIds.Dimensions[1] - 1;
+                    var text = _tokenizer!.Decode(new[] { (int)currentToken });
+                    var trimmed = text.TrimEnd();
                     
-                    var logitsSpan = ortValue.GetTensorDataAsSpan<Float16>();
-                    var lastLogits = new float[vocabSize];
-                    var offset = lastTokenIndex * vocabSize;
-                    for (int j = 0; j < vocabSize; j++)
-                    {
-                        lastLogits[j] = (float)logitsSpan[offset + j];
-                    }
+                    // After sentence-ending punctuation, predict space
+                    if (trimmed.EndsWith(".") || trimmed.EndsWith("!") || trimmed.EndsWith("?"))
+                        return _spaceTokenId;
                     
-                    nextTokenId = SampleToken(lastLogits, _temperature, _topP, _topK);
-                    ortValue.Dispose();
+                    // After comma/semicolon, predict space
+                    if (trimmed.EndsWith(",") || trimmed.EndsWith(";"))
+                        return _spaceTokenId;
+                    
+                    // After colon, predict newline or space
+                    if (trimmed.EndsWith(":"))
+                        return _newlineTokenId > 0 ? _newlineTokenId : _spaceTokenId;
+                    
+                    // After newline token, could be another newline or start of word
+                    if (text.Contains('\n'))
+                        return _spaceTokenId;
                 }
-                else
-                {
-                    ortValue.Dispose();
-                }
+                catch { /* Fallback on decode errors */ }
             }
             
-            // Dispose temporary values
-            foreach (var ov in tempOrtValues) ov.Dispose();
-            
-            // Dispose Interface Tensors (Slow Path ONLY)
-            // Fast Path: The OrtValue in capturedInterfaceTensors is ALIASING _pinnedInterfaceValues.
-            // We MUST NOT dispose it, because we reuse it next step.
-            if (inputLen > 1) 
-            {
-                foreach (var ov in capturedInterfaceTensors.Values) ov.Dispose();
-            }
-
-            return (nextTokenId, newKvCache);
+            // 4. Fallback: repeat current token
+            return currentToken;
         }
+
+        /// <summary>
+        /// Initialize common token IDs for heuristic prediction.
+        /// </summary>
+        private void InitializeCommonTokenIds()
+        {
+            if (_tokenizer == null || _tokenIdsInitialized) return;
+            
+            try
+            {
+                // Find space token
+                var spaceSeq = _tokenizer.Encode(" ");
+                if (spaceSeq != null && spaceSeq.NumSequences > 0)
+                {
+                    var ids = spaceSeq[0];
+                    if (ids.Length > 0) _spaceTokenId = (int)ids[0];
+                }
+                
+                // Find newline token
+                var nlSeq = _tokenizer.Encode("\n");
+                if (nlSeq != null && nlSeq.NumSequences > 0)
+                {
+                    var ids = nlSeq[0];
+                    if (ids.Length > 0) _newlineTokenId = (int)ids[0];
+                }
+                
+                _tokenIdsInitialized = true;
+                OnDiagnostic?.Invoke($"Predictor initialized: space={_spaceTokenId}, newline={_newlineTokenId}");
+            }
+            catch (Exception ex)
+            {
+                OnDiagnostic?.Invoke($"Failed to initialize common token IDs: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Update N-gram caches with observed token sequence.
+        /// </summary>
+        private void UpdateNgramCaches(long newToken)
+        {
+            // Update bigram: lastToken -> newToken
+            if (_lastToken >= 0)
+            {
+                _bigramCache[_lastToken] = newToken;
+            }
+            
+            // Update trigram: (prevToken, lastToken) -> newToken
+            if (_prevToken >= 0 && _lastToken >= 0)
+            {
+                _trigramCache[(_prevToken, _lastToken)] = newToken;
+            }
+            
+            // Shift window
+            _prevToken = _lastToken;
+            _lastToken = newToken;
+        }
+
+
 
         private long SampleToken(float[] logits, float temperature, float topP, int topK)
         {
-            if (temperature <= 0.0f)
+            // Use TensorPrimitives for SIMD acceleration (AVX-512/AVX2)
+            
+            // 1. Temperature Scaling
+            if (temperature > 0.0f)
             {
-                float maxVal = float.NegativeInfinity;
-                int maxIdx = 0;
-                for (int i = 0; i < logits.Length; i++)
-                {
-                    if (logits[i] > maxVal) { maxVal = logits[i]; maxIdx = i; }
-                }
-                return maxIdx;
+               // In-place division: logits = logits / temp
+               TensorPrimitives.Divide(logits, temperature, logits);
+            }
+            else
+            {
+               // Greedy: ArgMax
+               return TensorPrimitives.IndexOfMax(logits);
             }
 
-            for (int i = 0; i < logits.Length; i++) logits[i] /= temperature;
+            // 2. Softmax (TensorPrimitives doesn't have Softmax directly in .NET 8? 
+            // It was added in .NET 9 Preview. Check .NET 8 api availability.
+            // If not, we do Max/Exp/Sum manually with TensorPrimitives).
+            // 2. Softmax 
+            float maxLogit = TensorPrimitives.Max(logits);
+            
+            // exp(x - max)
+            TensorPrimitives.Add(logits, -maxLogit, logits);
+            TensorPrimitives.Exp(logits, logits);
+            
+            // Sum
+            float sumExp = TensorPrimitives.Sum(logits);
+            
+            // Normalize: probs = exp / sum
+            TensorPrimitives.Divide(logits, sumExp, logits);
+            
+            // logits now holds probabilities
+            var probs = logits;
 
-            var maxLogit = logits.Max();
-            var expLogits = logits.Select(l => Math.Exp(l - maxLogit)).ToArray();
-            var sumExp = expLogits.Sum();
-            var probs = expLogits.Select(e => e / sumExp).ToArray();
-
+            // 3. TopK / TopP (Sampling - scalar logic remains)
+            // Find indices
             var sortedIndices = Enumerable.Range(0, probs.Length).OrderByDescending(i => probs[i]).ToList();
             if (topK > 0 && topK < sortedIndices.Count) sortedIndices = sortedIndices.Take(topK).ToList();
 
@@ -586,7 +611,7 @@ namespace MelonStudio.Services
             }
 
             var candidateSum = candidates.Sum(c => c.prob);
-            var rand = new Random().NextDouble() * candidateSum;
+            var rand = _samplingRng.NextDouble() * candidateSum;
             double acc = 0;
             foreach (var (idx, prob) in candidates)
             {
@@ -625,14 +650,231 @@ namespace MelonStudio.Services
 
         public static bool IsHybridModelDirectory(string path) => File.Exists(Path.Combine(path, "hybrid_config.json"));
 
+        private async Task<(Dictionary<string, OrtValue> InterfaceTensors, Dictionary<string, OrtValue> NewKv, List<OrtValue> TempValues)> RunGpuStepAsync(
+            DenseTensor<long> inputIds,
+            DenseTensor<long> attentionMask,
+            DenseTensor<long> positionIds,
+            Dictionary<string, OrtValue> currentKvCache,
+            OrtIoBinding ioBinding)
+        {
+            var newKvCache = new Dictionary<string, OrtValue>();
+            var tempOrtValues = new List<OrtValue>();
+            int inputLen = (int)inputIds.Dimensions[1];
+
+            ioBinding.ClearBoundInputs();
+            ioBinding.ClearBoundOutputs();
+
+            // Bind Inputs
+            var inputIdsOrt = OrtValue.CreateTensorValueFromMemory(inputIds.ToArray(), new long[] { 1, inputLen });
+            tempOrtValues.Add(inputIdsOrt);
+            ioBinding.BindInput("input_ids", inputIdsOrt);
+
+            var maskOrt = OrtValue.CreateTensorValueFromMemory(attentionMask.ToArray(), new long[] { 1, attentionMask.Dimensions[1] });
+            tempOrtValues.Add(maskOrt);
+            ioBinding.BindInput("attention_mask", maskOrt);
+
+            if (_gpuSession!.InputMetadata.ContainsKey("position_ids"))
+            {
+                var posOrt = OrtValue.CreateTensorValueFromMemory(positionIds.ToArray(), new long[] { 1, positionIds.Dimensions[1] });
+                tempOrtValues.Add(posOrt);
+                ioBinding.BindInput("position_ids", posOrt);
+            }
+
+            // Bind KV Cache Inputs
+            foreach (var inputName in _hybridConfig!.GpuPartition.Inputs)
+            {
+                if (inputName.StartsWith("past_key_values"))
+                {
+                    if (currentKvCache.TryGetValue(inputName, out var existingKv))
+                    {
+                        ioBinding.BindInput(inputName, existingKv);
+                    }
+                    else
+                    {
+                        var emptyData = Array.Empty<Float16>();
+                        var emptyKv = OrtValue.CreateTensorValueFromMemory(emptyData, new long[] { 1, 32, 0, 96 });
+                        tempOrtValues.Add(emptyKv);
+                        ioBinding.BindInput(inputName, emptyKv);
+                    }
+                }
+            }
+
+            // Bind Outputs (Strict Order to match Processing Loop)
+            foreach (var outputName in _hybridConfig.GpuPartition.Outputs)
+            {
+                if (_hybridConfig.InterfaceTensors.ContainsValue(outputName) && inputLen == 1)
+                {
+                    // Fast Path: Bind Pinned Interface Tensor
+                    if (!_pinnedInterfaceValues.ContainsKey(outputName))
+                    {
+                         var pinnedData = new Float16[_hiddenSize];
+                         var pinnedOrt = OrtValue.CreateTensorValueFromMemory(pinnedData, new long[] { 1, 1, _hiddenSize });
+                         _pinnedInterfaceValues[outputName] = pinnedOrt;
+                    }
+                    ioBinding.BindOutput(outputName, _pinnedInterfaceValues[outputName]);
+                }
+                else
+                {
+                    // Slow Path or Standard Output: Bind to Device
+                    ioBinding.BindOutputToDevice(outputName, OrtMemoryInfo.DefaultInstance); 
+                }
+            }
+
+            ioBinding.SynchronizeBoundInputs();
+
+            // Execute
+            await Task.Run(() => { _gpuSession.RunWithBinding(_runOptions!, ioBinding); });
+            
+            var gpuResults = ioBinding.GetOutputValues();
+            ioBinding.SynchronizeBoundOutputs();
+
+            // Process Outputs
+            var capturedInterfaceTensors = new Dictionary<string, OrtValue>();
+            var gpuOutputList = gpuResults.ToList();
+
+            for (int i = 0; i < gpuOutputList.Count; i++)
+            {
+                var outputName = _hybridConfig.GpuPartition.Outputs[i];
+                var ortValue = gpuOutputList[i];
+
+                if (outputName.StartsWith("present"))
+                {
+                    var pastName = outputName.Replace("present.", "past_key_values.");
+                    newKvCache[pastName] = ortValue;
+                }
+                else if (_hybridConfig.InterfaceTensors.ContainsValue(outputName))
+                {
+                    capturedInterfaceTensors[outputName] = ortValue;
+                }
+                else
+                {
+                    ortValue.Dispose();
+                }
+            }
+
+            return (capturedInterfaceTensors, newKvCache, tempOrtValues);
+        }
+
+        private async Task<(long? NextToken, Dictionary<string, OrtValue> NewKv, List<OrtValue> TempValues)> RunCpuStepAsync(
+            DenseTensor<long> attentionMask,
+            DenseTensor<long> positionIds,
+            Dictionary<string, OrtValue> interfaceTensors,
+            Dictionary<string, OrtValue> currentKvCache,
+            int inputLenForDecoder)
+        {
+            var newKvCache = new Dictionary<string, OrtValue>();
+            var tempOrtValues = new List<OrtValue>();
+
+            _cpuIoBinding!.ClearBoundInputs();
+            _cpuIoBinding.ClearBoundOutputs();
+
+            // Bind Inputs
+            var cpuMaskOrt = OrtValue.CreateTensorValueFromMemory(attentionMask.ToArray(), new long[] { 1, attentionMask.Dimensions[1] });
+            tempOrtValues.Add(cpuMaskOrt);
+            _cpuIoBinding.BindInput("attention_mask", cpuMaskOrt);
+
+            if (_cpuSession!.InputMetadata.ContainsKey("position_ids"))
+            {
+                var cpuPosOrt = OrtValue.CreateTensorValueFromMemory(positionIds.ToArray(), new long[] { 1, positionIds.Dimensions[1] });
+                tempOrtValues.Add(cpuPosOrt);
+                _cpuIoBinding.BindInput("position_ids", cpuPosOrt);
+            }
+
+            // Bind Interface Tensors
+            foreach(var kvp in interfaceTensors)
+            {
+                _cpuIoBinding.BindInput(kvp.Key, kvp.Value);
+            }
+
+            // Bind KV Cache
+            // Note: CPU KV cache input names are different from GPU
+            foreach (var inputName in _hybridConfig!.CpuPartition.Inputs)
+            {
+                if (inputName.StartsWith("past_key_values"))
+                {
+                    if (currentKvCache.TryGetValue(inputName, out var existingKv))
+                    {
+                        _cpuIoBinding.BindInput(inputName, existingKv);
+                    }
+                    else
+                    {
+                        var emptyData = Array.Empty<Float16>();
+                        var emptyKv = OrtValue.CreateTensorValueFromMemory(emptyData, new long[] { 1, 32, 0, 96 });
+                        tempOrtValues.Add(emptyKv);
+                        _cpuIoBinding.BindInput(inputName, emptyKv);
+                    }
+                }
+            }
+
+            // Bind Outputs
+            foreach (var outputName in _hybridConfig.CpuPartition.Outputs)
+            {
+                _cpuIoBinding.BindOutputToDevice(outputName, OrtMemoryInfo.DefaultInstance);
+            }
+
+            _cpuIoBinding.SynchronizeBoundInputs();
+
+            // Execute
+            IDisposableReadOnlyCollection<OrtValue> cpuResults;
+            await Task.Run(() => { _cpuSession.RunWithBinding(_runOptions!, _cpuIoBinding); });
+            cpuResults = _cpuIoBinding.GetOutputValues();
+            _cpuIoBinding.SynchronizeBoundOutputs();
+
+            // Process Results
+            var cpuOutputList = cpuResults.ToList();
+            long? nextTokenId = null;
+
+            for (int i = 0; i < cpuOutputList.Count; i++)
+            {
+                var outputName = _hybridConfig.CpuPartition.Outputs[i];
+                var ortValue = cpuOutputList[i];
+
+                if (outputName.StartsWith("present"))
+                {
+                    var pastName = outputName.Replace("present.", "past_key_values.");
+                    newKvCache[pastName] = ortValue;
+                }
+                else if (outputName == "logits")
+                {
+                    var typeInfo = ortValue.GetTensorTypeAndShape();
+                    var vocabSize = (int)typeInfo.Shape[2];
+                    
+                    // We need input length to find last token index?
+                    var lastTokenIndex = inputLenForDecoder - 1;
+
+                    var logitsSpan = ortValue.GetTensorDataAsSpan<Float16>();
+                    var lastLogits = new float[vocabSize];
+                    var offset = lastTokenIndex * vocabSize;
+                    
+                    // SIMD Optimization for Float16 -> Float32
+                    // ORT Float16 is binary compatible with System.Half
+                    var sourceHalf = MemoryMarshal.Cast<Float16, Half>(logitsSpan.Slice(offset, vocabSize));
+                    
+                    // Safe Fallback / JIT Vectorizable Loop
+                    for (int j = 0; j < vocabSize; j++) lastLogits[j] = (float)sourceHalf[j];
+
+                    nextTokenId = SampleToken(lastLogits, _temperature, _topP, _topK);
+                    ortValue.Dispose();
+                }
+                else
+                {
+                    ortValue.Dispose();
+                }
+            }
+
+            return (nextTokenId, newKvCache, tempOrtValues);
+        }
+
         private void Cleanup()
         {
             // Dispose I/O Binding resources
             _runOptions?.Dispose();
-            _gpuIoBinding?.Dispose();
+            _gpuIoBindingA?.Dispose();
+            _gpuIoBindingB?.Dispose();
             _cpuIoBinding?.Dispose();
             _runOptions = null;
-            _gpuIoBinding = null;
+            _gpuIoBindingA = null;
+            _gpuIoBindingB = null;
             _cpuIoBinding = null;
             
             // Dispose Pinned Interface Values
@@ -650,6 +892,13 @@ namespace MelonStudio.Services
             _hybridConfig = null;
             _isHybridMode = false;
             _isInitialized = false;
+            
+            // Reset N-gram predictor state to avoid stale predictions
+            _prevToken = -1;
+            _lastToken = -1;
+            _bigramCache.Clear();
+            _trigramCache.Clear();
+            _tokenIdsInitialized = false;
         }
 
         public void Dispose()

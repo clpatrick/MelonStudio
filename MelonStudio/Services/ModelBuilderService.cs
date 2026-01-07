@@ -110,10 +110,15 @@ namespace MelonStudio.Services
             var args = new StringBuilder();
             args.Append("-m onnxruntime_genai.models.builder ");
             
-            // Model source
+            // Model source - resolve HuggingFace cache structure if needed
             if (Directory.Exists(modelNameOrPath))
             {
-                args.Append($"-i \"{modelNameOrPath}\" ");
+                var resolvedPath = ResolveModelPath(modelNameOrPath);
+                if (resolvedPath != modelNameOrPath)
+                {
+                    OnOutputReceived?.Invoke($"  📂 Resolved HuggingFace cache: {Path.GetFileName(resolvedPath)}");
+                }
+                args.Append($"-i \"{resolvedPath}\" ");
             }
             else
             {
@@ -202,6 +207,8 @@ namespace MelonStudio.Services
 
                 if (success)
                 {
+                    // Fix any null values in genai_config.json that ONNX Runtime GenAI can't parse
+                    SanitizeGenAiConfig(outputFolder);
                     OnOutputReceived?.Invoke("✓ Conversion completed successfully!");
                 }
                 else
@@ -260,7 +267,7 @@ namespace MelonStudio.Services
         }
 
         /// <summary>
-        /// Export hybrid CPU/GPU partitions using split_model2.py.
+        /// Export hybrid CPU/GPU partitions using split_model.py.
         /// </summary>
         public async Task ExportHybridPartitionsAsync(
             string modelNameOrPath,
@@ -273,11 +280,11 @@ namespace MelonStudio.Services
             _cts = new CancellationTokenSource();
             _stderrBuffer.Clear();
 
-            // Find split_model2.py - should be in the project root
+            // Find split_model.py - should be in the Scripts folder
             var scriptPath = FindSplitModelScript();
             if (string.IsNullOrEmpty(scriptPath))
             {
-                OnErrorReceived?.Invoke("split_model2.py not found. Cannot create hybrid partitions.");
+                OnErrorReceived?.Invoke("split_model.py not found. Cannot create hybrid partitions.");
                 OnCompleted?.Invoke(false);
                 return;
             }
@@ -333,7 +340,7 @@ namespace MelonStudio.Services
 
                 var outputTask = ReadStreamAsync(_currentProcess.StandardOutput, line =>
                 {
-                    // Parse JSON diagnostics from split_model2.py
+                    // Parse JSON diagnostics from split_model.py
                     if (line.StartsWith("[DIAG]"))
                     {
                         // Extract diagnostic message
@@ -394,17 +401,18 @@ namespace MelonStudio.Services
         }
 
         /// <summary>
-        /// Find the split_model2.py script in common locations.
+        /// Find the split_model.py script in common locations.
         /// </summary>
         private static string? FindSplitModelScript()
         {
-            // Check possible locations
+            // Check possible locations - prefer Scripts folder
             var candidates = new[]
             {
-                "split_model2.py",  // Current directory
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "split_model2.py"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "split_model2.py"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "split_model2.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "split_model.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Scripts", "split_model.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "Scripts", "split_model.py"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "MelonStudio", "Scripts", "split_model.py"),
+                "split_model.py",  // Current directory fallback
             };
 
             foreach (var path in candidates)
@@ -489,6 +497,18 @@ namespace MelonStudio.Services
                     "This model's architecture is not supported by ONNX Runtime GenAI",
                     "The builder doesn't recognize this model type. Supported: Phi, Llama, Mistral, Qwen, Gemma, etc.",
                     "Try a model with a supported architecture",
+                    null
+                );
+            }
+
+            // Incomplete model folder (missing config.json or architectures field)
+            if (stderr.Contains("TypeError") && stderr.Contains("'NoneType'") && stderr.Contains("architectures"))
+            {
+                return new ConversionDiagnostic(
+                    ConversionErrorCategory.ModelIncompatible,
+                    "The model folder is incomplete or corrupted",
+                    "The config.json file is missing the 'architectures' field. This often happens when using a HuggingFace cache folder instead of a proper model.",
+                    "Use the HuggingFace model ID (e.g., 'meta-llama/Llama-3.2-1B-Instruct') instead of a local temp/cache folder",
                     null
                 );
             }
@@ -607,6 +627,122 @@ namespace MelonStudio.Services
                 callback?.Invoke(line);
             }
         }
+
+        /// <summary>
+        /// Fixes values in config files that ONNX Runtime GenAI cannot parse.
+        /// - genai_config.json: "top_k": null -> "top_k": 50
+        /// - tokenizer_config.json: "tokenizer_class": "TokenizersBackend" -> "PreTrainedTokenizerFast"
+        /// </summary>
+        private void SanitizeGenAiConfig(string modelFolder)
+        {
+            try
+            {
+                // Fix genai_config.json
+                var genaiConfigPath = Path.Combine(modelFolder, "genai_config.json");
+                if (File.Exists(genaiConfigPath))
+                {
+                    var content = File.ReadAllText(genaiConfigPath);
+                    var modified = false;
+
+                    // Fix "top_k": null -> "top_k": 50 (reasonable default)
+                    if (content.Contains("\"top_k\": null") || content.Contains("\"top_k\":null"))
+                    {
+                        content = System.Text.RegularExpressions.Regex.Replace(
+                            content, 
+                            @"""top_k"":\s*null", 
+                            "\"top_k\": 50");
+                        modified = true;
+                    }
+
+                    if (modified)
+                    {
+                        File.WriteAllText(genaiConfigPath, content);
+                        OnOutputReceived?.Invoke("  ⚡ Fixed genai_config.json (null values sanitized)");
+                    }
+                }
+
+                // Fix tokenizer_config.json
+                var tokenizerConfigPath = Path.Combine(modelFolder, "tokenizer_config.json");
+                if (File.Exists(tokenizerConfigPath))
+                {
+                    var content = File.ReadAllText(tokenizerConfigPath);
+                    var modified = false;
+
+                    // Fix unsupported tokenizer class
+                    if (content.Contains("\"tokenizer_class\": \"TokenizersBackend\"") || 
+                        content.Contains("\"tokenizer_class\":\"TokenizersBackend\""))
+                    {
+                        content = System.Text.RegularExpressions.Regex.Replace(
+                            content, 
+                            @"""tokenizer_class"":\s*""TokenizersBackend""", 
+                            "\"tokenizer_class\": \"PreTrainedTokenizerFast\"");
+                        modified = true;
+                    }
+
+                    if (modified)
+                    {
+                        File.WriteAllText(tokenizerConfigPath, content);
+                        OnOutputReceived?.Invoke("  ⚡ Fixed tokenizer_config.json (tokenizer class sanitized)");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                OnErrorReceived?.Invoke($"Warning: Could not sanitize config files: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Resolves a model path, detecting HuggingFace cache structure and returning the actual model folder.
+        /// HuggingFace cache structure: {path}/models--{org}--{name}/snapshots/{hash}/
+        /// Git clone structure: {path}/ (with config.json at root)
+        /// </summary>
+        private static string ResolveModelPath(string path)
+        {
+            // If config.json exists at root, it's a proper model folder
+            if (File.Exists(Path.Combine(path, "config.json")))
+            {
+                return path;
+            }
+
+            // Check for HuggingFace cache structure: models--{org}--{name}/snapshots/{hash}/
+            var subdirs = Directory.GetDirectories(path);
+            foreach (var subdir in subdirs)
+            {
+                var dirName = Path.GetFileName(subdir);
+                if (dirName.StartsWith("models--"))
+                {
+                    // Found HF cache structure, look for snapshots
+                    var snapshotsDir = Path.Combine(subdir, "snapshots");
+                    if (Directory.Exists(snapshotsDir))
+                    {
+                        // Get the first snapshot (usually there's only one)
+                        var snapshots = Directory.GetDirectories(snapshotsDir);
+                        if (snapshots.Length > 0)
+                        {
+                            // Use the most recently modified snapshot
+                            var latestSnapshot = snapshots
+                                .OrderByDescending(d => Directory.GetLastWriteTime(d))
+                                .First();
+                            
+                            // Verify it has config.json
+                            if (File.Exists(Path.Combine(latestSnapshot, "config.json")))
+                            {
+                                return latestSnapshot;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also check if path itself IS the snapshot folder (one level up from models--)
+            if (path.Contains("snapshots") && File.Exists(Path.Combine(path, "config.json")))
+            {
+                return path;
+            }
+
+            // No HF cache structure found, return original path
+            return path;
+        }
     }
 }
-

@@ -98,20 +98,24 @@
 
             <!-- Filter Checkboxes -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,15">
-                <CheckBox Content="ONNX Ready" 
+                <CheckBox Content="ONNX Ready"
                           IsChecked="{Binding FilterOnnx}"
                           Foreground="#D4D4D4" Margin="0,0,20,0"/>
-                <CheckBox Content="CUDA" 
+                <CheckBox Content="CUDA"
                           IsChecked="{Binding FilterCuda}"
                           Foreground="#D4D4D4" Margin="0,0,20,0"/>
-                <CheckBox Content="INT4" 
+                <CheckBox Content="INT4"
                           IsChecked="{Binding FilterInt4}"
                           Foreground="#D4D4D4" Margin="0,0,20,0"/>
-                <CheckBox Content="FP16" 
+                <CheckBox Content="FP16"
                           IsChecked="{Binding FilterFp16}"
                           Foreground="#D4D4D4" Margin="0,0,20,0"/>
-                
-                <TextBlock Text="{Binding ResultCount, StringFormat='Showing {0} models'}" 
+                <CheckBox Content="Source Models"
+                          IsChecked="{Binding FilterSourceModels}"
+                          Foreground="#D4D4D4" Margin="0,0,20,0"
+                          ToolTip="Show only unconverted models (SafeTensors/PyTorch) suitable for hybrid CPU/GPU splitting"/>
+
+                <TextBlock Text="{Binding ResultCount, StringFormat='Showing {0} models'}"
                            Foreground="#808080" VerticalAlignment="Center"
                            Margin="20,0,0,0"/>
             </StackPanel>

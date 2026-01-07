@@ -165,6 +165,7 @@ public class Program
             Console.WriteLine($"Total Tokens: {result.TotalTokensGenerated}");
             Console.WriteLine($"Total Time: {result.TotalElapsedSeconds:F2}s");
             Console.WriteLine($"Average Speed: {result.AverageTokensPerSecond:F1} tokens/second");
+            Console.WriteLine(service.Summary);
         }
         catch (Exception ex)
         {

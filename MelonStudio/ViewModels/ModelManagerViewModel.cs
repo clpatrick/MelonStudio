@@ -67,6 +67,9 @@ namespace MelonStudio.ViewModels
         [ObservableProperty]
         private bool _filterFp16 = false;
 
+        [ObservableProperty]
+        private bool _filterSourceModels = false;
+
         // Sort property
         [ObservableProperty]
         private string _selectedSort = "downloads";
@@ -123,8 +126,36 @@ namespace MelonStudio.ViewModels
                 {
                     IsConverting = false;
                     StatusMessage = success ? "Conversion completed!" : "Conversion failed";
+                    SaveConversionLog(success);
                     SaveSettings(); // Save settings after conversion
                 });
+        }
+
+        /// <summary>
+        /// Saves the conversion log to a file in the logs folder.
+        /// </summary>
+        private void SaveConversionLog(bool success)
+        {
+            try
+            {
+                var logsFolder = Path.Combine(OutputFolder, "logs");
+                if (!Directory.Exists(logsFolder))
+                {
+                    Directory.CreateDirectory(logsFolder);
+                }
+
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var status = success ? "success" : "failed";
+                var logFileName = $"conversion_{timestamp}_{status}.log";
+                var logPath = Path.Combine(logsFolder, logFileName);
+
+                File.WriteAllText(logPath, ConversionLog);
+                ConversionLog += $"\n📄 Log saved to: {logPath}\n";
+            }
+            catch (Exception ex)
+            {
+                ConversionLog += $"\n⚠ Failed to save log: {ex.Message}\n";
+            }
         }
 
         public void SaveSettings()
@@ -177,6 +208,7 @@ namespace MelonStudio.ViewModels
                     FilterCuda,
                     FilterInt4,
                     FilterFp16,
+                    FilterSourceModels,
                     limit: 50);
 
                 foreach (var model in results)

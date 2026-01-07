@@ -1,10 +1,10 @@
 {
-  "Timestamp": "Not yet run",
-  "ModelPath": "",
-  "MachineName": "",
+  "Timestamp": "2026-01-07T03:28:19.6138313Z",
+  "ModelPath": "models\\phi3.5-hybrid",
+  "MachineName": "PATRICK11",
   "Results": [],
   "AverageTokensPerSecond": 0,
   "TotalElapsedSeconds": 0,
   "TotalTokensGenerated": 0,
-  "Error": "Benchmark not yet executed. Run MelonStudio.Benchmark on workstation with RTX 4090."
+  "Error": "[ErrorCode:RuntimeException] Non-zero status code returned while running SkipSimplifiedLayerNormalization node. Name:\u0027/model/layers.16/input_layernorm/SkipLayerNorm\u0027 Status Message: E:\\_work\\1\\s\\include\\onnxruntime\\core/framework/op_kernel_context.h:42 onnxruntime::OpKernelContext::Input Missing Input: /model/layers.15/mlp/down_proj/MatMul/output_0\n"
 }

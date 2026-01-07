@@ -1,0 +1,58 @@
+# Build outputs
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.cache
+
+# Agent/AI tool directories
+.claude/
+.agent/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp and log files
+*.log
+*.txt
+!README.txt
+!LICENSE.txt
+
+# Benchmark logs and temp outputs
+benchmark*.log
+build*.log
+build_output*.log
+debug_log*.txt
+build_errors*.txt
+result_*.txt
+export_log*.txt
+io_binding*.log
+phase*_test.log
+pre_*_test.log
+post_*_test.log
+test_run.log
+_*.txt
+
+# Misc temp files
+50
+
+# Model cache (large files)
+models/
+cache_dir/
+
+# Benchmark result files (keep results.json, ignore others)
+benchmarks/results/
+
+# Backup files
+*.bak
+
+# Duplicate docs at root
+/onnx_hybrid_cpu_gpu_orchestration.md

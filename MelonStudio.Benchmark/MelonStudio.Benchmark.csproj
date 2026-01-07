@@ -12,5 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.11.4" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.23.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MelonStudio\MelonStudio.csproj" />
   </ItemGroup>
 </Project>

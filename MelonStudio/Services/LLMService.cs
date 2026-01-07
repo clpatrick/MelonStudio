@@ -8,19 +8,31 @@ using Microsoft.ML.OnnxRuntimeGenAI;
 
 namespace MelonStudio.Services
 {
+    public enum ModelType
+    {
+        Unknown,
+        Llama,
+        Phi,
+        Mistral,
+        Qwen,
+        Gemma
+    }
+
     public class LLMService : IDisposable
     {
         private Model? _model;
         private Tokenizer? _tokenizer;
         private bool _isInitialized;
+        private ModelType _modelType = ModelType.Unknown;
+        private string _modelPath = "";
 
-        // Configurable generation settings
         private int _maxLength = 8192;
         private double _temperature = 0.7;
         private double _topP = 0.9;
 
         public bool IsInitialized => _isInitialized;
         public int ModelContextLength { get; private set; } = 0;
+        public ModelType DetectedModelType => _modelType;
 
         public void UpdateSettings(int maxLength, double temperature, double topP)
         {
@@ -33,15 +45,16 @@ namespace MelonStudio.Services
         {
             if (_isInitialized) return ModelContextLength;
 
+            _modelPath = modelPath;
+
             int contextLength = await Task.Run(() =>
             {
                 if (!Directory.Exists(modelPath))
                     throw new DirectoryNotFoundException($"Model directory not found: {modelPath}");
 
-                // Read context length from genai_config.json
-                int ctxLen = ReadContextLengthFromConfig(modelPath);
+                var (ctxLen, modelType) = ReadModelConfig(modelPath);
+                _modelType = modelType;
 
-                // Initialize the model
                 try 
                 {
                     _model = new Model(modelPath);
@@ -51,13 +64,11 @@ namespace MelonStudio.Services
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"Failed to load model from {modelPath}. Ensure ONNX files are present.", ex);
+                    throw new Exception($"Failed to load model from {modelPath}. Error: {ex.Message}", ex);
                 }
             });
 
             ModelContextLength = contextLength;
-            
-            // Auto-set max_length to context_length if context is valid
             if (contextLength > 0)
             {
                 _maxLength = contextLength;
@@ -66,8 +77,11 @@ namespace MelonStudio.Services
             return contextLength;
         }
 
-        private int ReadContextLengthFromConfig(string modelPath)
+        private (int contextLength, ModelType modelType) ReadModelConfig(string modelPath)
         {
+            int contextLength = 0;
+            var modelType = ModelType.Unknown;
+
             try
             {
                 var configPath = Path.Combine(modelPath, "genai_config.json");
@@ -76,40 +90,78 @@ namespace MelonStudio.Services
                     var json = File.ReadAllText(configPath);
                     using var doc = JsonDocument.Parse(json);
                     
-                    if (doc.RootElement.TryGetProperty("model", out var modelSection) &&
-                        modelSection.TryGetProperty("context_length", out var ctxLen))
+                    if (doc.RootElement.TryGetProperty("model", out var modelSection))
                     {
-                        return ctxLen.GetInt32();
+                        if (modelSection.TryGetProperty("context_length", out var ctxLen))
+                        {
+                            contextLength = ctxLen.GetInt32();
+                        }
+
+                        if (modelSection.TryGetProperty("type", out var typeElement))
+                        {
+                            var typeStr = typeElement.GetString()?.ToLowerInvariant() ?? "";
+                            modelType = typeStr switch
+                            {
+                                "llama" => ModelType.Llama,
+                                "phi" or "phi3" => ModelType.Phi,
+                                "mistral" => ModelType.Mistral,
+                                "qwen" or "qwen2" => ModelType.Qwen,
+                                "gemma" or "gemma2" => ModelType.Gemma,
+                                _ => ModelType.Unknown
+                            };
+                        }
                     }
                 }
             }
             catch { }
             
-            return 0; // Unknown
+            return (contextLength, modelType);
+        }
+
+        private string FormatPrompt(string userMessage, string systemPrompt)
+        {
+            return _modelType switch
+            {
+                ModelType.Llama => 
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n" +
+                    systemPrompt + 
+                    "<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n" +
+                    userMessage + 
+                    "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+
+                ModelType.Phi => 
+                    "<|system|>\n" + systemPrompt + "<|end|>\n" +
+                    $"<|system|>\n{systemPrompt}<|end|>\n<|user|>\n{userMessage}<|end|>\n<|assistant|>\n",
+
+                ModelType.Mistral =>
+                    $"<s>[INST] {systemPrompt}\n\n{userMessage} [/INST]",
+
+                ModelType.Qwen =>
+                    $"<|im_start|>system\n{systemPrompt}<|im_end|>\n<|im_start|>user\n{userMessage}<|im_end|>\n<|im_start|>assistant\n",
+
+                ModelType.Gemma =>
+                    $"<start_of_turn>user\n{systemPrompt}\n\n{userMessage}<end_of_turn>\n<start_of_turn>model\n",
+
+                _ => // Default/Unknown
+                     $"System: {systemPrompt}\nUser: {userMessage}\nAssistant:"
+            };
         }
 
         public async IAsyncEnumerable<string> GenerateResponseAsync(
-            string prompt, 
-            string systemPrompt = "You are a helpful AI assistant.",
+            string userMessage, 
+            string systemPrompt, 
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (!_isInitialized || _tokenizer == null || _model == null)
-                throw new InvalidOperationException("Model not initialized.");
+            {
+                yield break;
+            }
 
-            // Construct the full prompt based on typical chat templates (e.g. Phi-3)
-            // Ideally this should use the model's chat template, but for now we approximate.
-            // Phi-3 format: <|user|>\n{prompt}<|end|>\n<|assistant|>
-            string fullPrompt = $"<|user|>\n{systemPrompt}\n\n{prompt}<|end|>\n<|assistant|>";
-
-            var sequences = _tokenizer.Encode(fullPrompt);
-
-            // Ensure max_length doesn't exceed model's context_length
-            var effectiveMaxLength = ModelContextLength > 0 
-                ? Math.Min(_maxLength, ModelContextLength) 
-                : _maxLength;
+            var prompt = FormatPrompt(userMessage, systemPrompt);
+            var sequences = _tokenizer.Encode(prompt);
 
             using var generatorParams = new GeneratorParams(_model);
-            generatorParams.SetSearchOption("max_length", effectiveMaxLength);
+            generatorParams.SetSearchOption("max_length", _maxLength);
             generatorParams.SetSearchOption("temperature", _temperature);
             generatorParams.SetSearchOption("top_p", _topP);
 
@@ -118,44 +170,25 @@ namespace MelonStudio.Services
 
             while (!generator.IsDone())
             {
-                // Check for cancellation
                 if (cancellationToken.IsCancellationRequested)
                     yield break;
 
-                // Generate next token (ComputeLogits is now internal to GenerateNextToken)
-                await Task.Run(() => 
-                {
-                    generator.GenerateNextToken();
-                }, cancellationToken);
+                await Task.Run(() => generator.GenerateNextToken(), cancellationToken);
 
-                // Decode the new token
-                // Note: GetSequence(0) returns the entire sequence so far or just the new token?
-                // The C# API usually works by decoding the *new* tokens.
-                // Let's rely on standard loop pattern for C# GenAI.
-                
-                // Optimized approach: keep track of previous token count or use specific API if available.
-                
-                // Fix for CS8652: Span<T> cannot be used in async methods in C# 12 and older.
-                // We extract the logic to a synchronous method.
-                var newTokenId = GetLastTokenId(generator);
-                 
-                var decodedToken = _tokenizer.Decode(new[] { newTokenId });
-                 
-                yield return decodedToken;
+                var outputTokens = generator.GetSequence(0);
+                var newToken = outputTokens[outputTokens.Length - 1];
+                var tokenText = _tokenizer.Decode(new[] { newToken });
+
+                yield return tokenText;
             }
-        }
-
-        private int GetLastTokenId(Generator generator)
-        {
-            // This method is synchronous, so using Span (ref struct) here is allowed.
-            var outputCallback = generator.GetSequence(0);
-            return outputCallback[outputCallback.Length - 1];
         }
 
         public void Dispose()
         {
-            _tokenizer?.Dispose();
             _model?.Dispose();
+            _tokenizer?.Dispose();
+            _model = null;
+            _tokenizer = null;
             _isInitialized = false;
         }
     }

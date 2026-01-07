@@ -74,6 +74,7 @@ A native Windows 11 application (WPF/.NET 8) for running local LLMs on NVIDIA RT
 | **CUDA** | [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) |
 | **Python** | Python 3.10+ (for model conversion) |
 | **onnxruntime-genai** | `pip install onnxruntime-genai-cuda` |
+| **Hugging Face** | `huggingface-cli` (optional, for downloading models) |
 
 ---
 

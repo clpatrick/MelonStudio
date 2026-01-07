@@ -311,16 +311,28 @@ namespace MelonStudio.Services
             bool filterCuda = false,
             bool filterInt4 = false,
             bool filterFp16 = false,
+            bool filterSourceModels = false,
             int limit = 50)
         {
             var url = $"{BaseUrl}/models?pipeline_tag=text-generation&";
-            
+
             // Build search query with filters
             var searchTerms = new List<string>();
             if (!string.IsNullOrWhiteSpace(query))
                 searchTerms.Add(query);
-            if (filterOnnx)
+
+            // Source Models filter: search for safetensors (unconverted source models)
+            // This is mutually exclusive with ONNX filter
+            if (filterSourceModels)
+            {
+                searchTerms.Add("safetensors");
+                // Don't add onnx search term when filtering for source models
+            }
+            else if (filterOnnx)
+            {
                 searchTerms.Add("onnx");
+            }
+
             if (filterInt4)
                 searchTerms.Add("int4");
             if (filterFp16)
@@ -344,7 +356,7 @@ namespace MelonStudio.Services
 
                 // Filter out incompatible models
                 var filtered = models
-                    .Where(m => IsCompatibleModel(m))
+                    .Where(m => IsCompatibleModel(m, filterSourceModels))
                     .Take(limit)
                     .ToList();
 
@@ -357,13 +369,40 @@ namespace MelonStudio.Services
             }
         }
 
-        private bool IsCompatibleModel(HuggingFaceModel model)
+        private bool IsCompatibleModel(HuggingFaceModel model, bool sourceModelsOnly = false)
         {
             if (string.IsNullOrEmpty(model.Id)) return false;
 
             // Use the model's built-in compatibility detection
             // Allow Compatible and Warning models, exclude only Incompatible
-            return model.CompatibilityStatus != "Incompatible";
+            if (model.CompatibilityStatus == "Incompatible")
+                return false;
+
+            // When filtering for source models, exclude already-converted ONNX/GenAI models
+            // These have KV cache routing embedded that breaks simple graph splitting
+            if (sourceModelsOnly)
+            {
+                var lowerId = model.Id.ToLowerInvariant();
+                var lowerTags = model.Tags?.Select(t => t.ToLowerInvariant()).ToList() ?? new List<string>();
+
+                // Exclude ONNX-converted models
+                if (lowerTags.Contains("onnx") || lowerTags.Contains("onnxruntime") ||
+                    lowerId.Contains("-onnx") || lowerId.Contains("_onnx") ||
+                    lowerTags.Contains("genai") || lowerId.Contains("-genai"))
+                {
+                    return false;
+                }
+
+                // Exclude already-quantized formats that aren't source models
+                if (lowerTags.Contains("gguf") || lowerId.Contains("-gguf") ||
+                    lowerTags.Contains("exl2") || lowerId.Contains("-exl2") ||
+                    lowerTags.Contains("mlx") || lowerId.Contains("mlx-community"))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         public async Task<HuggingFaceModelDetails?> GetModelDetailsAsync(string modelId)
