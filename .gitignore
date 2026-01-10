@@ -47,6 +47,13 @@ _*.txt
 # Model cache (large files)
 models/
 cache_dir/
+*.onnx
+*.onnx.data
+test_split_output/
+
+# Python virtual environments
+.olive-env/
+.olive-cache/
 
 # Benchmark result files (keep results.json, ignore others)
 benchmarks/results/

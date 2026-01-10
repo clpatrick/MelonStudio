@@ -22,7 +22,7 @@ namespace MelonStudio.ViewModels
         private string _selectedModelId = "";
 
         [ObservableProperty]
-        private string _outputFolder = @"C:\models";
+        private string _outputFolder = @"C:\Repos\MelonStudio\models";
 
         [ObservableProperty]
         private string _selectedPrecision = "int4";
@@ -257,15 +257,44 @@ namespace MelonStudio.ViewModels
             }
         }
 
+        [ObservableProperty]
+        private ObservableCollection<string> _variants = new();
+
+        [ObservableProperty]
+        private string? _selectedVariant;
+
+        [ObservableProperty]
+        private bool _hasVariants;
+
         [RelayCommand]
         private async Task SelectModelAsync(HuggingFaceModel model)
         {
             SelectedModelId = model.Id;
             IsLoadingDetails = true;
+            Variants.Clear();
+            SelectedVariant = null;
+            HasVariants = false;
             
             try
             {
                 SelectedModelDetails = await _huggingFaceService.GetModelDetailsAsync(model.Id);
+                
+                if (SelectedModelDetails != null && SelectedModelDetails.AvailableVariants.Count > 0)
+                {
+                    foreach (var v in SelectedModelDetails.AvailableVariants)
+                    {
+                        Variants.Add(v);
+                    }
+                    
+                    HasVariants = true;
+                    
+                    // Smart default selection
+                    var preferred = Variants.FirstOrDefault(v => v.Contains("cuda") && v.Contains("int4")) 
+                                 ?? Variants.FirstOrDefault(v => v.Contains("cuda"))
+                                 ?? Variants.FirstOrDefault();
+                    
+                    SelectedVariant = preferred;
+                }
             }
             catch
             {
@@ -285,9 +314,11 @@ namespace MelonStudio.ViewModels
                 StatusMessage = "Please select or enter a model";
                 return;
             }
-
+            
+            // ... existing conversion logic remains the same ...
             if (!Directory.Exists(OutputFolder))
             {
+                // ...
                 try
                 {
                     Directory.CreateDirectory(OutputFolder);
@@ -326,32 +357,7 @@ namespace MelonStudio.ViewModels
             );
         }
 
-        [RelayCommand]
-        private void CancelConversion()
-        {
-            _modelBuilderService.Cancel();
-            StatusMessage = "Cancelling...";
-        }
-
-        [RelayCommand]
-        private void BrowseOutputFolder()
-        {
-            // WPF folder dialog would go here
-            // For now, just use the default
-        }
-
-        [RelayCommand]
-        private void OpenModelPage()
-        {
-            if (SelectedModelDetails != null)
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = SelectedModelDetails.HuggingFaceUrl,
-                    UseShellExecute = true
-                });
-            }
-        }
+        // ... skipping CancelConversion, BrowseOutputFolder, OpenModelPage ...
 
         [RelayCommand]
         private async Task DownloadOnnxModelAsync()
@@ -388,36 +394,92 @@ namespace MelonStudio.ViewModels
 
             StatusMessage = $"Downloading {SelectedModelDetails.DisplayName}...";
             ConversionLog += $"Downloading ONNX model to: {modelOutputFolder}\n";
+            
+            if (!string.IsNullOrEmpty(SelectedVariant) && SelectedVariant != "Root")
+            {
+                 StatusMessage += $" (Variant: {SelectedVariant})";
+                 ConversionLog += $"Selected Variant: {SelectedVariant}\n";
+            }
 
             try
             {
-                // Use huggingface-cli to download the model
-                var tokenArg = string.IsNullOrWhiteSpace(HuggingFaceToken) 
-                    ? "" 
-                    : $"--token {HuggingFaceToken}";
+                // Use Olive's HfModelHandler via our python script
+                var finalOutputFolder = modelOutputFolder;
+                var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "olive", "olive_download.py");
+                
+                // Locate the .olive-env python
+                var pythonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "olive", ".olive-env", "Scripts", "python.exe");
+                if (!File.Exists(pythonPath))
+                {
+                    // Fallback to searching in PATH if venv not found (though venv is preferred)
+                    pythonPath = "python";
+                }
+
+                var tokenArg = string.IsNullOrWhiteSpace(HuggingFaceToken) ? "" : $"--token {HuggingFaceToken}";
+                var subfolderArg = (!string.IsNullOrEmpty(SelectedVariant) && SelectedVariant != "Root") 
+                    ? $"--subfolder \"{SelectedVariant}\"" 
+                    : "";
+                
+                var arguments = $"\"{scriptPath}\" --model_id {SelectedModelId} --output_dir \"{finalOutputFolder}\" {tokenArg} {subfolderArg}";
 
                 var process = new System.Diagnostics.Process
                 {
                     StartInfo = new System.Diagnostics.ProcessStartInfo
                     {
-                        FileName = "huggingface-cli",
-                        Arguments = $"download {SelectedModelId} --local-dir \"{modelOutputFolder}\" {tokenArg}",
+                        FileName = pythonPath,
+                        Arguments = arguments,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     }
                 };
+                
+                StatusMessage = $"Downloading {SelectedModelDetails.DisplayName} with Olive...";
+                ConversionLog += $"Executing: {pythonPath} {arguments}\n";
 
                 process.OutputDataReceived += (s, e) =>
                 {
                     if (!string.IsNullOrEmpty(e.Data))
-                        App.Current.Dispatcher.Invoke(() => ConversionLog += e.Data + "\n");
+                    {
+                        var line = e.Data;
+                        // Parse metadata
+                        if (line.StartsWith("METADATA:"))
+                        {
+                            try
+                            {
+                                var json = line.Substring(9).Trim();
+                                // Simple manual parse to avoid dependency, or assume simple JSON structure
+                                // Extract total_bytes and file_count using basic string ops for robustness
+                                var totalBytesMatch = System.Text.RegularExpressions.Regex.Match(json, "\"total_bytes\":\\s*(\\d+)");
+                                var fileCountMatch = System.Text.RegularExpressions.Regex.Match(json, "\"file_count\":\\s*(\\d+)");
+                                
+                                if (totalBytesMatch.Success && fileCountMatch.Success)
+                                {
+                                    long bytes = long.Parse(totalBytesMatch.Groups[1].Value);
+                                    int count = int.Parse(fileCountMatch.Groups[1].Value);
+                                    
+                                    string sizeStr;
+                                    if (bytes > 1024 * 1024 * 1024) sizeStr = $"{(bytes / 1024.0 / 1024.0 / 1024.0):F2} GB";
+                                    else sizeStr = $"{(bytes / 1024.0 / 1024.0):F1} MB";
+                                    
+                                    App.Current.Dispatcher.Invoke(() => 
+                                    {
+                                        StatusMessage = $"Downloading {count} files ({sizeStr})...";
+                                        ConversionLog += $"[METADATA] Total size: {sizeStr}, Files: {count}\n";
+                                    });
+                                }
+                            }
+                            catch { /* Ignore parse errors, just fallback to logging */ }
+                        }
+                        
+                        App.Current.Dispatcher.Invoke(() => ConversionLog += line + "\n");
+                    }
                 };
                 process.ErrorDataReceived += (s, e) =>
                 {
                     if (!string.IsNullOrEmpty(e.Data))
-                        App.Current.Dispatcher.Invoke(() => ConversionLog += e.Data + "\n");
+                        App.Current.Dispatcher.Invoke(() => ConversionLog += "[STDERR] " + e.Data + "\n");
                 };
 
                 process.Start();
@@ -434,14 +496,13 @@ namespace MelonStudio.ViewModels
                 else
                 {
                     StatusMessage = "✗ Download failed";
-                    ConversionLog += "\n✗ Download failed\n";
+                    ConversionLog += "\n✗ Download failed. See log for details.\n";
                 }
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Download error: {ex.Message}";
                 ConversionLog += $"\nError: {ex.Message}\n";
-                ConversionLog += "Make sure huggingface-cli is installed: pip install huggingface_hub\n";
             }
             finally
             {

@@ -80,6 +80,13 @@ namespace MelonStudio.Services
                 status = ModelStatus.Converted;
                 precision = DetectOnnxPrecision(modelPath);
             }
+            else if (HybridLLMService.IsHybridModelDirectory(modelPath))
+            {
+                // Hybrid split model (gpu_part.onnx + cpu_part.onnx)
+                format = "hybrid";
+                status = ModelStatus.Converted;
+                precision = DetectOnnxPrecision(modelPath);
+            }
             else if (hasOnnxFiles && !hasGenAiConfig)
             {
                 // Has ONNX but missing config - partial conversion

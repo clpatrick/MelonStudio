@@ -70,7 +70,7 @@ namespace MelonStudio.ViewModels
             await LoadModelFromPathAsync(_settings.LastModelPath);
         }
 
-        public async Task LoadModelFromPathAsync(string modelPath)
+        public async Task LoadModelFromPathAsync(string modelPath, string? onnxFileName = null)
         {
             try
             {
@@ -96,7 +96,7 @@ namespace MelonStudio.ViewModels
                 else
                 {
                     // Load as standard
-                    var contextLength = await _llmService.InitializeAsync(modelPath);
+                    var contextLength = await _llmService.InitializeAsync(modelPath, onnxFileName);
                     
                     _isUsingHybrid = false;
                     IsHybridMode = false;
@@ -188,9 +188,30 @@ namespace MelonStudio.ViewModels
             finally
             {
                 IsGenerating = false;
-                if (StatusMessage.StartsWith("Generating"))
+                if (StatusMessage.StartsWith("Generating") || StatusMessage.StartsWith("Stopping"))
                     StatusMessage = IsHybridMode ? $"Ready ({HybridStatus})" : "Ready.";
             }
+        }
+
+        public void UnloadModel()
+        {
+            if (_isUsingHybrid)
+            {
+                _hybridService.Cleanup();
+            }
+            else
+            {
+                _llmService.Dispose(); 
+                // Re-initialize to be safe for next load
+                // _llmService = new LLMService(); // Ideally we'd just Dispose the session inside LLMService
+            }
+
+            LoadedModelName = "No model loaded";
+            StatusMessage = "Model unloaded.";
+            _isUsingHybrid = false;
+            IsHybridMode = false;
+            ModelContextLength = 0;
+            HybridStatus = "";
         }
 
         [RelayCommand]

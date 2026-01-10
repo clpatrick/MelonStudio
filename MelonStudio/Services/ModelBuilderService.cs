@@ -29,6 +29,16 @@ namespace MelonStudio.Services
         string? IssueUrl
     );
 
+    public record ModelAnalysisResult(
+        bool Success,
+        int LayerCount,
+        double TotalSizeGb,
+        double BaseSizeGb,
+        double AvgLayerSizeGb,
+        string Precision,
+        string ErrorMessage
+    );
+
     public class ModelBuilderService
     {
         public event Action<string>? OnOutputReceived;
@@ -95,7 +105,7 @@ namespace MelonStudio.Services
             }
         }
 
-        public async Task ConvertModelAsync(
+        public async Task<bool> ConvertModelAsync(
             string modelNameOrPath,
             string outputFolder,
             string precision = "int4",
@@ -177,7 +187,7 @@ namespace MelonStudio.Services
                 {
                     OnErrorReceived?.Invoke("Failed to start Python process");
                     OnCompleted?.Invoke(false);
-                    return;
+                    return false;
                 }
 
                 // Read output asynchronously
@@ -236,16 +246,19 @@ namespace MelonStudio.Services
                 }
 
                 OnCompleted?.Invoke(success);
+                return success;
             }
             catch (OperationCanceledException)
             {
                 OnOutputReceived?.Invoke("Conversion cancelled");
                 OnCompleted?.Invoke(false);
+                return false;
             }
             catch (Exception ex)
             {
                 OnErrorReceived?.Invoke($"Error: {ex.Message}");
                 OnCompleted?.Invoke(false);
+                return false;
             }
             finally
             {
@@ -267,13 +280,101 @@ namespace MelonStudio.Services
         }
 
         /// <summary>
+        /// Analyzes an ONNX model to determine layer count and size.
+        /// </summary>
+        public async Task<ModelAnalysisResult> InspectModelAsync(string modelPath)
+        {
+            // Find analyze_onnx_size.py
+            var scriptPath = FindSplitModelScript()?.Replace("split_model.py", "analyze_onnx_size.py");
+            if (string.IsNullOrEmpty(scriptPath) || !File.Exists(scriptPath))
+            {
+                return new ModelAnalysisResult(false, 0, 0, 0, 0, "", "Analysis script not found");
+            }
+
+            // Handle folder path input - look for model.onnx
+            string targetPath = modelPath;
+            if (Directory.Exists(modelPath))
+            {
+                var potentialModel = Path.Combine(modelPath, "model.onnx");
+                if (File.Exists(potentialModel))
+                {
+                    targetPath = potentialModel;
+                }
+                else
+                {
+                     return new ModelAnalysisResult(false, 0, 0, 0, 0, "", "model.onnx not found in selected folder");
+                }
+            }
+            else if (!File.Exists(modelPath))
+            {
+                 return new ModelAnalysisResult(false, 0, 0, 0, 0, "", "Model file not found");
+            }
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = $"\"{scriptPath}\" \"{targetPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            try
+            {
+                using var process = Process.Start(psi);
+                if (process == null) return new ModelAnalysisResult(false, 0, 0, 0, 0, "", "Failed to start analysis process");
+
+                var output = await process.StandardOutput.ReadToEndAsync();
+                var error = await process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode != 0)
+                {
+                    return new ModelAnalysisResult(false, 0, 0, 0, 0, "", $"Analysis failed: {error}");
+                }
+
+                // Parse output
+                // Expected format:
+                // Total Calculated Params Size: 4.5000 GB
+                // Base Size: 0.5000 GB
+                // Average Layer Size: 0.1250 GB
+                // Layers Found: 32
+                // Dominant Precision: FP16
+
+                double totalSize = 0, baseSize = 0, avgLayerSize = 0;
+                int layers = 0;
+                string precision = "Unknown";
+
+                foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (line.Contains("Total Calculated Params Size:") && double.TryParse(Regex.Match(line, @"[\d\.]+").Value, out double t))
+                        totalSize = t;
+                    else if (line.Contains("Base Size:") && double.TryParse(Regex.Match(line, @"[\d\.]+").Value, out double b))
+                        baseSize = b;
+                    else if (line.Contains("Average Layer Size:") && double.TryParse(Regex.Match(line, @"[\d\.]+").Value, out double a))
+                        avgLayerSize = a;
+                    else if (line.Contains("Layers Found:") && int.TryParse(Regex.Match(line, @"\d+").Value, out int l))
+                        layers = l;
+                    else if (line.Contains("Dominant Precision:"))
+                        precision = line.Split(':')[1].Trim();
+                }
+
+                return new ModelAnalysisResult(true, layers, totalSize, baseSize, avgLayerSize, precision, "");
+            }
+            catch (Exception ex)
+            {
+                return new ModelAnalysisResult(false, 0, 0, 0, 0, "", $"Exception: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Export hybrid CPU/GPU partitions using split_model.py.
         /// </summary>
         public async Task ExportHybridPartitionsAsync(
-            string modelNameOrPath,
+            string onnxModelPath,
             string outputFolder,
-            int gpuLayers,
-            string precision = "fp16",
+            int splitLayer,
             string? huggingFaceToken = null,
             string? cacheDir = null)
         {
@@ -289,13 +390,18 @@ namespace MelonStudio.Services
                 return;
             }
 
+            // Ensure output directory exists (script might not create parent)
+            if (!Directory.Exists(outputFolder))
+            {
+                Directory.CreateDirectory(outputFolder);
+            }
+
             var args = new StringBuilder();
-            args.Append($"\"{scriptPath}\" export ");
-            args.Append($"\"{modelNameOrPath}\" ");
-            args.Append($"--split-layer {gpuLayers} ");
-            args.Append($"--output-dir \"{outputFolder}\" ");
-            args.Append($"--precision {precision} ");
-            args.Append("--json ");
+            // Usage: split_model.py [-h] --split-layer SPLIT_LAYER [--output OUTPUT] model
+            args.Append($"\"{scriptPath}\" ");
+            args.Append($"\"{onnxModelPath}\" ");
+            args.Append($"--split-layer {splitLayer} ");
+            args.Append($"--output \"{outputFolder}\" ");
 
             // Set environment variable for HuggingFace token
             var env = new Dictionary<string, string>();
@@ -323,8 +429,10 @@ namespace MelonStudio.Services
                 psi.EnvironmentVariables[key] = value;
             }
 
-            OnOutputReceived?.Invoke($"Creating hybrid partitions (GPU: {gpuLayers} layers)...");
+            OnOutputReceived?.Invoke($"Creating hybrid partitions (Split at Layer {splitLayer})...");
+            OnOutputReceived?.Invoke($"Command arguments: {args}");
             OnOutputReceived?.Invoke($"Script: {scriptPath}");
+            OnOutputReceived?.Invoke($"Model: {onnxModelPath}");
             OnOutputReceived?.Invoke($"Output: {outputFolder}");
             OnOutputReceived?.Invoke("");
 
@@ -340,16 +448,7 @@ namespace MelonStudio.Services
 
                 var outputTask = ReadStreamAsync(_currentProcess.StandardOutput, line =>
                 {
-                    // Parse JSON diagnostics from split_model.py
-                    if (line.StartsWith("[DIAG]"))
-                    {
-                        // Extract diagnostic message
-                        OnOutputReceived?.Invoke(line.Substring(7));
-                    }
-                    else
-                    {
-                        OnOutputReceived?.Invoke(line);
-                    }
+                    OnOutputReceived?.Invoke(line);
                 }, _cts.Token);
 
                 var errorTask = ReadStreamAsync(_currentProcess.StandardError, line =>
@@ -371,14 +470,13 @@ namespace MelonStudio.Services
                 {
                     OnOutputReceived?.Invoke("");
                     OnOutputReceived?.Invoke("✓ Hybrid partitions created successfully!");
-                    OnOutputReceived?.Invoke($"  GPU partition: {outputFolder}/gpu_part.onnx");
-                    OnOutputReceived?.Invoke($"  CPU partition: {outputFolder}/cpu_part.onnx");
-                    OnOutputReceived?.Invoke($"  Config: {outputFolder}/hybrid_config.json");
+                    OnOutputReceived?.Invoke($"  GPU partition: {Path.Combine(outputFolder, "gpu_part.onnx")}");
+                    OnOutputReceived?.Invoke($"  CPU partition: {Path.Combine(outputFolder, "cpu_part.onnx")}");
                 }
                 else
                 {
                     OnOutputReceived?.Invoke("✗ Hybrid partition creation failed");
-                    var diagnostic = AnalyzeError(_stderrBuffer.ToString(), modelNameOrPath);
+                    var diagnostic = AnalyzeError(_stderrBuffer.ToString(), onnxModelPath);
                     OnDiagnosticGenerated?.Invoke(diagnostic);
                 }
 
@@ -408,11 +506,7 @@ namespace MelonStudio.Services
             // Check possible locations - prefer Scripts folder
             var candidates = new[]
             {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "split_model.py"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Scripts", "split_model.py"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "Scripts", "split_model.py"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "MelonStudio", "Scripts", "split_model.py"),
-                "split_model.py",  // Current directory fallback
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "split_model.py"),
             };
 
             foreach (var path in candidates)
@@ -743,6 +837,27 @@ namespace MelonStudio.Services
 
             // No HF cache structure found, return original path
             return path;
+        }
+
+        /// <summary>
+        /// Verifies the split models by analyzing them individually.
+        /// </summary>
+        public async Task<(ModelAnalysisResult GpuResult, ModelAnalysisResult CpuResult)> VerifySplitModelsAsync(string outputFolder)
+        {
+            var gpuPath = Path.Combine(outputFolder, "gpu_part.onnx");
+            var cpuPath = Path.Combine(outputFolder, "cpu_part.onnx");
+
+            OnOutputReceived?.Invoke("");
+            OnOutputReceived?.Invoke("🔍 Verifying split models...");
+
+            var gpuResult = await InspectModelAsync(gpuPath);
+            OnOutputReceived?.Invoke($"  GPU Part: {gpuResult.LayerCount} layers, {gpuResult.Precision}, {gpuResult.TotalSizeGb:F2} GB");
+
+            var cpuResult = await InspectModelAsync(cpuPath);
+            OnOutputReceived?.Invoke($"  CPU Part: {cpuResult.LayerCount} layers, {cpuResult.Precision}, {cpuResult.TotalSizeGb:F2} GB");
+            OnOutputReceived?.Invoke("");
+
+            return (gpuResult, cpuResult);
         }
     }
 }

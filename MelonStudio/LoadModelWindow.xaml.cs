@@ -8,6 +8,7 @@ namespace MelonStudio
     {
         public LoadModelViewModel ViewModel { get; }
         public string? SelectedModelPath { get; private set; }
+        public string? SelectedOnnxFileName { get; private set; }
 
         public LoadModelWindow()
         {
@@ -16,19 +17,23 @@ namespace MelonStudio
             DataContext = ViewModel;
         }
 
-        private void BrowseFolder_Click(object sender, RoutedEventArgs e)
+        private async void BrowseFile_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new OpenFolderDialog
+            var dialog = new OpenFileDialog
             {
-                Title = "Select Models Folder",
+                Title = "Select ONNX Model",
+                Filter = "ONNX Models|*.onnx;*.onnx.data|All Files|*.*",
                 InitialDirectory = ViewModel.ModelsFolder
             };
             
             if (dialog.ShowDialog() == true)
             {
-                ViewModel.ModelsFolder = dialog.FolderName;
-                ViewModel.RefreshModels();
-                ViewModel.SaveSettings();
+                var path = dialog.FileName;
+                if (path.EndsWith(".onnx.data", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    path = path.Substring(0, path.Length - 5); // Remove .data
+                }
+                await ViewModel.AnalyzeSelectedFileAsync(path);
             }
         }
 
@@ -45,14 +50,24 @@ namespace MelonStudio
 
         private void Load_Click(object sender, RoutedEventArgs e)
         {
-            if (ViewModel.SelectedModel == null)
+            // Prefer analyzed model path (from file browse), then selected from list
+            if (!string.IsNullOrEmpty(ViewModel.AnalyzedModelPath))
+            {
+                SelectedModelPath = ViewModel.AnalyzedModelPath;
+                SelectedOnnxFileName = ViewModel.SelectedOnnxFileName;
+            }
+            else if (ViewModel.SelectedModel != null)
+            {
+                SelectedModelPath = ViewModel.SelectedModel.Path;
+                SelectedOnnxFileName = null; // Will use default discovery
+            }
+            else
             {
                 System.Windows.MessageBox.Show("Please select a model to load.", "No Model Selected",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            SelectedModelPath = ViewModel.SelectedModel.Path;
             ViewModel.SaveSettings();
             DialogResult = true;
             Close();

@@ -97,7 +97,7 @@ namespace MelonStudio
             
             if (loadDialog.ShowDialog() == true && !string.IsNullOrEmpty(loadDialog.SelectedModelPath))
             {
-                await ViewModel.LoadModelFromPathAsync(loadDialog.SelectedModelPath);
+                await ViewModel.LoadModelFromPathAsync(loadDialog.SelectedModelPath, loadDialog.SelectedOnnxFileName);
             }
         }
 

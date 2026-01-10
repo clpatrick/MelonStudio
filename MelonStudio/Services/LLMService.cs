@@ -41,9 +41,13 @@ namespace MelonStudio.Services
             _topP = topP;
         }
 
-        public async Task<int> InitializeAsync(string modelPath)
+        public async Task<int> InitializeAsync(string modelPath, string? onnxFileName = null)
         {
-            if (_isInitialized) return ModelContextLength;
+            // If already initialized, dispose the old model first to allow hot-swapping
+            if (_isInitialized)
+            {
+                Dispose();
+            }
 
             _modelPath = modelPath;
 
@@ -52,12 +56,65 @@ namespace MelonStudio.Services
                 if (!Directory.Exists(modelPath))
                     throw new DirectoryNotFoundException($"Model directory not found: {modelPath}");
 
+                // Fix: Check if we are in the 'onnx' subfolder (common mistake)
+                // If genai_config.json is missing here, check the parent
+                if (!File.Exists(Path.Combine(modelPath, "genai_config.json")) && 
+                    File.Exists(Path.Combine(Directory.GetParent(modelPath)?.FullName ?? "", "genai_config.json")))
+                {
+                    modelPath = Directory.GetParent(modelPath)!.FullName;
+                    _modelPath = modelPath; // Update the class field too
+                }
+
                 var (ctxLen, modelType) = ReadModelConfig(modelPath);
                 _modelType = modelType;
 
                 try 
                 {
-                    _model = new Model(modelPath);
+                    // If a specific ONNX filename was provided, update genai_config.json FIRST
+                    // (before Config reads the file)
+                    if (!string.IsNullOrEmpty(onnxFileName))
+                    {
+                        var configPath = Path.Combine(modelPath, "genai_config.json");
+                        if (File.Exists(configPath))
+                        {
+                            try
+                            {
+                                var json = File.ReadAllText(configPath);
+                                
+                                // Determine the relative path to the ONNX file
+                                var relativePath = File.Exists(Path.Combine(modelPath, onnxFileName))
+                                    ? onnxFileName
+                                    : $"onnx/{onnxFileName}";
+                                
+                                // Use JsonNode for proper mutable JSON editing
+                                var jsonNode = System.Text.Json.Nodes.JsonNode.Parse(json);
+                                if (jsonNode != null)
+                                {
+                                    var modelNode = jsonNode["model"];
+                                    if (modelNode != null)
+                                    {
+                                        var decoderNode = modelNode["decoder"];
+                                        if (decoderNode != null && decoderNode is System.Text.Json.Nodes.JsonObject decoderObj)
+                                        {
+                                            // Add or update the filename property
+                                            decoderObj["filename"] = relativePath;
+                                            
+                                            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                                            File.WriteAllText(configPath, jsonNode.ToJsonString(options));
+                                        }
+                                    }
+                                }
+                            }
+                            catch { /* If config update fails, continue with defaults */ }
+                        }
+                    }
+                    
+                    // Now create Config (it will read the updated genai_config.json)
+                    using var config = new Config(modelPath);
+                    config.ClearProviders();
+                    config.AppendProvider("cuda");
+                    
+                    _model = new Model(config);
                     _tokenizer = new Tokenizer(_model);
                     _isInitialized = true;
                     return ctxLen;

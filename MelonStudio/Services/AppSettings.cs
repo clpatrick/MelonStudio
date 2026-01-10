@@ -12,6 +12,7 @@ namespace MelonStudio.Services
         public string DefaultProvider { get; set; } = "cuda";
         public bool EnableCudaGraph { get; set; } = false; // Not all models support this
         public string LastModelPath { get; set; } = "";
+        public string LastConversionBrowseFolder { get; set; } = "";
 
         // Generation settings
         public int MaxLength { get; set; } = 8192;

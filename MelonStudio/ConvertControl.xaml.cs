@@ -18,6 +18,15 @@ namespace MelonStudio
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
+            // Wire up unload request
+            ViewModel.RequestModelUnload = () => 
+            {
+                if (Window.GetWindow(this) is MainWindow mw)
+                {
+                    mw.ViewModel.UnloadModel();
+                }
+            };
+
             await ViewModel.LoadLocalModelsAsync();
             await ViewModel.LoadTempModelsAsync();
             

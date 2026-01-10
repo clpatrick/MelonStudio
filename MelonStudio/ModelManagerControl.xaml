@@ -296,6 +296,16 @@
                         <TextBox Text="{Binding SelectedModelId, UpdateSourceTrigger=PropertyChanged}"
                                  Background="#3C3C3C" Foreground="#D4D4D4"
                                  BorderBrush="#555555" Padding="10,8"/>
+                                 
+                        <!-- Variant Selector for Multi-Variant ONNX Models -->
+                        <StackPanel Margin="0,12,0,0" Visibility="{Binding HasVariants, Converter={StaticResource BoolToVis}}">
+                             <TextBlock Text="Select Variant (Subfolder)" Foreground="#FFC107" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                             <ComboBox ItemsSource="{Binding Variants}" 
+                                       SelectedItem="{Binding SelectedVariant}"
+                                       Background="#3C3C3C" Foreground="#D4D4D4" Padding="10,8"/>
+                             <TextBlock Text="Note: This will download ONLY the selected variant." 
+                                        Foreground="#808080" FontSize="10" Margin="0,2,0,0"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Precision + Provider Row -->

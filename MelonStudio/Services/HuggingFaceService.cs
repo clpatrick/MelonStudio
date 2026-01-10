@@ -227,20 +227,31 @@ namespace MelonStudio.Services
             f.IsFile && f.Filename?.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) == true) == true;
 
         public bool HasGenAiConfig => Siblings?.Any(f => 
-            f.Filename == "genai_config.json") == true;
+            f.Filename?.EndsWith("genai_config.json", StringComparison.OrdinalIgnoreCase) == true) == true;
 
         public bool HasPyTorchWeights => Siblings?.Any(f => 
             f.IsFile && (f.Filename?.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase) == true ||
                         f.Filename?.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) == true ||
-                        f.Filename == "pytorch_model.bin" ||
+                        f.Filename?.EndsWith("pytorch_model.bin", StringComparison.OrdinalIgnoreCase) == true ||
                         f.Filename?.Contains("model.safetensors") == true)) == true;
 
         public bool IsOnnxModel => HasOnnxFiles || HasGenAiConfig;
+
+        public List<string> AvailableVariants => Siblings?
+            .Where(f => f.Filename?.EndsWith("genai_config.json", StringComparison.OrdinalIgnoreCase) == true)
+            .Select(f => 
+            {
+                var dir = System.IO.Path.GetDirectoryName(f.Filename)?.Replace("\\", "/");
+                return string.IsNullOrEmpty(dir) ? "Root" : dir;
+            })
+            .OrderBy(v => v)
+            .ToList() ?? new List<string>();
 
         public string ModelFormat
         {
             get
             {
+                if (AvailableVariants.Count > 1) return $"⚡ Multi-Variant ({AvailableVariants.Count})";
                 if (HasGenAiConfig) return "⚡ ONNX GenAI Ready";
                 if (HasOnnxFiles) return "⚡ ONNX Format";
                 if (HasPyTorchWeights) return "🔧 Needs Conversion";
@@ -248,7 +259,14 @@ namespace MelonStudio.Services
             }
         }
 
-        public string ActionLabel => IsOnnxModel ? "Download" : "Convert to ONNX";
+        public string ActionLabel
+        {
+            get
+            {
+                if (AvailableVariants.Count > 0) return "Select Variant";
+                return IsOnnxModel ? "Download" : "Convert to ONNX";
+            }
+        }
     }
 
     public class HuggingFaceFile
@@ -417,7 +435,7 @@ namespace MelonStudio.Services
                 
                 if (details != null)
                 {
-                    // Fetch files with sizes from tree API
+                    // Fetch files with sizes from tree API (recursive to find nested models)
                     details.Siblings = await GetModelFilesAsync(modelId);
                     
                     // Try to get description from README
@@ -437,7 +455,8 @@ namespace MelonStudio.Services
         {
             try
             {
-                var url = $"{BaseUrl}/models/{modelId}/tree/main";
+                // Use recursive=true to find nested files (like cuda/cuda-int4/genai_config.json)
+                var url = $"{BaseUrl}/models/{modelId}/tree/main?recursive=true";
                 var response = await _httpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
 

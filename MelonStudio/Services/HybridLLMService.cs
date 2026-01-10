@@ -865,7 +865,7 @@ namespace MelonStudio.Services
             return (nextTokenId, newKvCache, tempOrtValues);
         }
 
-        private void Cleanup()
+        public void Cleanup()
         {
             // Dispose I/O Binding resources
             _runOptions?.Dispose();

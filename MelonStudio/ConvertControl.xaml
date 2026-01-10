@@ -10,14 +10,92 @@
              Background="#1E1E1E">
     
     <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+        <Grid.Resources>
+            <!-- Dark Theme ComboBox Toggle Button -->
+            <ControlTemplate x:Key="ComboBoxToggleButton" TargetType="ToggleButton">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="20"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="Border" Grid.ColumnSpan="2" Background="#3C3C3C" BorderBrush="#555555" BorderThickness="1" CornerRadius="2"/>
+                    <Border Grid.Column="0" Background="#3C3C3C" BorderBrush="#555555" BorderThickness="0,0,1,0" CornerRadius="2,0,0,2"/>
+                    <Path x:Name="Arrow" Grid.Column="1" Fill="#D4D4D4" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Border" Property="Background" Value="#505050"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
+            <!-- Dark ComboBox Style -->
+            <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+                <Setter Property="Foreground" Value="#D4D4D4"/>
+                <Setter Property="Background" Value="#3C3C3C"/>
+                <Setter Property="BorderBrush" Value="#555555"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ComboBox">
+                            <Grid>
+                                <ToggleButton x:Name="ToggleButton" Template="{StaticResource ComboBoxToggleButton}" Grid.Column="2" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" Margin="8,3,23,3" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                                    <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                        <Border x:Name="DropDownBorder" Background="#2D2D30" BorderBrush="#555555" BorderThickness="1"/>
+                                        <ScrollViewer Margin="4,6,4,6" SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Grid>
+                                </Popup>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Dark ComboBoxItem Style -->
+            <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+                <Setter Property="Background" Value="#2D2D30"/>
+                <Setter Property="Foreground" Value="#D4D4D4"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="8,4"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ComboBoxItem">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#007ACC"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Grid.Resources>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
         <!-- Header -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
@@ -68,14 +146,78 @@
                                   SelectedItem="{Binding SelectedLocalModel}"
                                   DisplayMemberPath="Name"
                                   Width="350" Padding="8,6"
-                                  Background="#3C3C3C" Foreground="#D4D4D4"/>
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
                     </StackPanel>
                 </RadioButton>
+                <!-- Analyze Button -->
+                <Button Content="🔍 Analyze Model Details" 
+                        Command="{Binding AnalyzeModelCommand}"
+                        HorizontalAlignment="Right" Margin="0,10,0,0" Padding="15,8"
+                        Background="#007ACC" Foreground="White" BorderThickness="0"
+                        IsEnabled="{Binding IsAnalyzing, Converter={StaticResource InverseBoolConverter}}">
+                     <Button.Resources>
+                         <Style TargetType="Button">
+                             <Style.Triggers>
+                                 <DataTrigger Binding="{Binding IsAnalyzing}" Value="True">
+                                     <Setter Property="Content" Value="⏳ Analyzing..."/>
+                                 </DataTrigger>
+                             </Style.Triggers>
+                         </Style>
+                     </Button.Resources>
+                </Button>
             </StackPanel>
+
         </Border>
 
-        <!-- Converter & Target Configuration -->
-        <Grid Grid.Row="2" Margin="0,0,0,15">
+        <!-- Model Details Display -->
+        <Border Grid.Row="2" Background="#2D2D30" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                Visibility="{Binding IsModelAnalyzed, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Model Analysis" FontSize="11" Foreground="#808080" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding StatusMessage, Mode=OneWay}" 
+                             Foreground="#4FC3F7" Background="Transparent" BorderThickness="0"
+                             FontSize="14" FontWeight="SemiBold" Margin="0,2,0,0"
+                             IsReadOnly="True" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- Stats Badges -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <Border Background="#3E3E42" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📏 "/>
+                            <TextBlock Text="{Binding MaxGpuLayers, StringFormat={}{0} Layers}" Foreground="#D4D4D4" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="#3E3E42" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚖ "/>
+                            <TextBlock Text="{Binding AnalyzedPrecision}" Foreground="#D4D4D4" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Background="#3E3E42" CornerRadius="4" Padding="8,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="💾 "/>
+                            <TextBlock Text="{Binding TotalModelSizeGb, StringFormat={}{0:F1} GB}" Foreground="#D4D4D4" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Converter & Target Configuration (Hidden until analyzed) -->
+        <Grid Grid.Row="3" Margin="0,0,0,15"
+              Visibility="{Binding IsModelAnalyzed, Converter={StaticResource BoolToVisConverter}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -89,7 +231,8 @@
                     <ComboBox ItemsSource="{Binding ConverterOptions}"
                               SelectedItem="{Binding SelectedConverter}"
                               Padding="10,8"
-                              Background="#3C3C3C" Foreground="#D4D4D4"/>
+                              Style="{StaticResource DarkComboBoxStyle}"
+                              ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
                     <TextBlock Text="ⓘ Uses python -m onnxruntime_genai.models.builder" 
                                FontSize="11" Foreground="#808080" Margin="0,8,0,0"/>
                 </StackPanel>
@@ -118,13 +261,15 @@
                         <ComboBox Grid.Column="1" ItemsSource="{Binding PrecisionOptions}"
                                   SelectedItem="{Binding SelectedPrecision}"
                                   Padding="8,6" Margin="0,0,0,8"
-                                  Background="#3C3C3C" Foreground="#D4D4D4"/>
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
 
                         <TextBlock Grid.Row="1" Text="Provider:" Foreground="#A0A0A0" VerticalAlignment="Center"/>
                         <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ProviderOptions}"
                                   SelectedItem="{Binding SelectedProvider}"
                                   Padding="8,6" Margin="0,0,0,8"
-                                  Background="#3C3C3C" Foreground="#D4D4D4"/>
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
 
                         <!-- Hybrid Mode Checkbox -->
                         <CheckBox Grid.Row="2" Grid.ColumnSpan="2" 
@@ -147,7 +292,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="GPU Layers:" Foreground="#A0A0A0" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" 
-                                        Minimum="1" Maximum="{Binding MaxGpuLayers}" 
+                                        Minimum="0" Maximum="{Binding MaxGpuLayers}" 
                                         Value="{Binding GpuLayerCount}"
                                         TickFrequency="1" IsSnapToTickEnabled="True"
                                         VerticalAlignment="Center"/>
@@ -183,8 +328,9 @@
             </Border>
         </Grid>
 
-        <!-- Advanced Options -->
-        <Border Grid.Row="3" Background="#252526" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+        <!-- Advanced Options (Hidden until analyzed) -->
+        <Border Grid.Row="4" Background="#252526" CornerRadius="8" Padding="20" Margin="0,0,0,15"
+                Visibility="{Binding IsModelAnalyzed, Converter={StaticResource BoolToVisConverter}}">
             <Expander Header="Advanced Options" Foreground="#D4D4D4" IsExpanded="False">
                 <StackPanel Margin="0,12,0,0">
                     <Grid Margin="0,0,0,10">
@@ -226,8 +372,74 @@
             </Expander>
         </Border>
 
+        <!-- Verification Results -->
+        <Border Grid.Row="5" Background="#2D2D30" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                Visibility="{Binding HasVerificationResults, Converter={StaticResource BoolToVisConverter}}">
+            <StackPanel>
+                 <TextBlock Text="Verification Results" FontSize="14" FontWeight="SemiBold" 
+                            Foreground="#D4D4D4" Margin="0,0,0,12"/>
+                 <Grid>
+                     <Grid.ColumnDefinitions>
+                         <ColumnDefinition Width="*"/>
+                         <ColumnDefinition Width="*"/>
+                     </Grid.ColumnDefinitions>
+                     
+                     <!-- GPU Part -->
+                     <Border Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,8,0">
+                         <StackPanel>
+                             <TextBlock Text="GPU Partition" Foreground="#4FC3F7" FontWeight="Bold" Margin="0,0,0,4"/>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Layers: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding GpuVerificationResult.LayerCount}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Precision: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding GpuVerificationResult.Precision}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Size: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding GpuVerificationResult.TotalSizeGb, StringFormat={}{0:F2} GB}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                         </StackPanel>
+                     </Border>
+                     
+                     <!-- CPU Part -->
+                     <Border Grid.Column="1" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="8,0,0,0">
+                         <StackPanel>
+                             <TextBlock Text="CPU Partition" Foreground="#81C784" FontWeight="Bold" Margin="0,0,0,4"/>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Layers: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding CpuVerificationResult.LayerCount}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Precision: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding CpuVerificationResult.Precision}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="Size: " Foreground="#A0A0A0"/>
+                                 <TextBlock Text="{Binding CpuVerificationResult.TotalSizeGb, StringFormat={}{0:F2} GB}" Foreground="#D4D4D4"/>
+                             </StackPanel>
+                         </StackPanel>
+                     </Border>
+                 </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Action Buttons -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,15">
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,0,0,15">
+             <!-- Visibility bound to IsModelAnalyzed implicitly via StartConversionCommand CanExecute, 
+                  but we can also hide it if we want strict progressive disclosure. 
+                  Let's keep it visible but disabled, or hide it. User request implies "Then let's present a way to split". 
+                  So let's hide it too. -->
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsModelAnalyzed}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
             <Button Content="▶ Start Conversion" 
                     Command="{Binding StartConversionCommand}"
                     Padding="20,12" FontSize="14"
@@ -252,7 +464,7 @@
         </StackPanel>
 
         <!-- Conversion Log -->
-        <Border Grid.Row="5" Background="#1A1A1A" CornerRadius="8" Padding="15">
+        <Border Grid.Row="7" Background="#1A1A1A" CornerRadius="8" Padding="15">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -262,7 +474,7 @@
                 <TextBlock Text="Conversion Log" FontSize="12" FontWeight="SemiBold" 
                            Foreground="#808080" Margin="0,0,0,10"/>
                 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="1" Height="150" VerticalScrollBarVisibility="Auto">
                     <TextBox Text="{Binding ConversionLog, Mode=OneWay}"
                              IsReadOnly="True" TextWrapping="Wrap"
                              Background="Transparent" Foreground="#B0B0B0"
@@ -271,5 +483,7 @@
                 </ScrollViewer>
             </Grid>
         </Border>
+        </Grid>
+    </ScrollViewer>
     </Grid>
 </UserControl>

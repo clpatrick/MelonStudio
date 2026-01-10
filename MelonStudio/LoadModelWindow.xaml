@@ -1,17 +1,25 @@
 <Window x:Class="MelonStudio.LoadModelWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:MelonStudio.Converters"
         Title="Load Model - MelonStudio" 
-        Height="450" Width="600"
+        Height="500" Width="650"
         Background="#1E1E1E"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip">
+
+    <Window.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <converters:HybridIconConverter x:Key="HybridIconConverter"/>
+    </Window.Resources>
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -20,25 +28,17 @@
                    FontSize="18" FontWeight="Bold" 
                    Foreground="#D4D4D4" Margin="0,0,0,15"/>
 
-        <!-- Folder Path -->
-        <Grid Grid.Row="1" Margin="0,0,0,15">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            
-            <TextBox x:Name="FolderPathBox"
-                     Text="{Binding ModelsFolder, UpdateSourceTrigger=PropertyChanged}"
-                     Background="#3C3C3C" Foreground="#D4D4D4"
-                     BorderBrush="#555555" Padding="10,8"
-                     VerticalContentAlignment="Center"/>
-            
-            <Button Grid.Column="1" Content="Browse..."
-                    Click="BrowseFolder_Click"
-                    Margin="10,0,0,0" Padding="15,8"
-                    Background="#5A5A5A" Foreground="White"
-                    BorderThickness="0"/>
-        </Grid>
+        <!-- Browse Button Row -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,15">
+            <Button Content="📂 Browse for ONNX File..."
+                    Click="BrowseFile_Click"
+                    Padding="15,10"
+                    Background="#4A90D9" Foreground="White"
+                    FontWeight="SemiBold" BorderThickness="0"/>
+            <TextBlock Text="or select from list below" 
+                       Foreground="#808080" 
+                       VerticalAlignment="Center" Margin="15,0,0,0"/>
+        </StackPanel>
 
         <!-- Model List -->
         <ListBox Grid.Row="2" 
@@ -82,21 +82,102 @@
             </ListBox.ItemContainerStyle>
         </ListBox>
 
+        <!-- Analysis Panel (appears after file selection) -->
+        <Border Grid.Row="3" Background="#2D2D2D" CornerRadius="8" Padding="15" Margin="0,15,0,0"
+                Visibility="{Binding ShowAnalysisPanel, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Model Name & Type -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding IsHybridModel, Converter={StaticResource HybridIconConverter}}" 
+                               FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel>
+                        <TextBlock Text="{Binding ModelName}" FontSize="16" FontWeight="Bold" Foreground="#4EC9B0"/>
+                        <TextBlock Foreground="#A0A0A0" FontSize="12">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0} • {1:F2} GB">
+                                    <Binding Path="Precision"/>
+                                    <Binding Path="TotalSizeGb"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Hybrid Split Info (only for hybrid models) -->
+                <Grid Grid.Row="1" Margin="0,15,0,0" Visibility="{Binding IsHybridModel, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- GPU Part -->
+                    <Border Background="#1A3A1A" CornerRadius="6" Padding="12" Margin="0,0,5,0">
+                        <StackPanel>
+                            <TextBlock Text="🎮 GPU Partition" Foreground="#4EC9B0" FontWeight="SemiBold"/>
+                            <TextBlock Foreground="#D4D4D4" Margin="0,5,0,0">
+                                <Run Text="{Binding GpuLayers}" FontSize="24" FontWeight="Bold"/>
+                                <Run Text="layers" FontSize="12"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding GpuSizeGb, StringFormat={}{0:F2} GB}" Foreground="#808080" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CPU Part -->
+                    <Border Grid.Column="1" Background="#2A2A3A" CornerRadius="6" Padding="12" Margin="5,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="💻 CPU Partition" Foreground="#9CDCFE" FontWeight="SemiBold"/>
+                            <TextBlock Foreground="#D4D4D4" Margin="0,5,0,0">
+                                <Run Text="{Binding CpuLayers}" FontSize="24" FontWeight="Bold"/>
+                                <Run Text="layers" FontSize="12"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding CpuSizeGb, StringFormat={}{0:F2} GB}" Foreground="#808080" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Standard Model Info (only for non-hybrid) -->
+                <StackPanel Grid.Row="1" Margin="0,10,0,0" 
+                            Visibility="{Binding IsHybridModel, Converter={StaticResource InverseBoolToVisibility}}">
+                    <TextBlock Foreground="#D4D4D4">
+                        <Run Text="{Binding TotalLayers}" FontSize="20" FontWeight="Bold"/>
+                        <Run Text=" layers detected" FontSize="14"/>
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Loading Indicator -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,15,0,0"
+                    Visibility="{Binding IsAnalyzing, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="⏳ Analyzing model..." Foreground="#DCDCAA" FontSize="14"/>
+        </StackPanel>
+
         <!-- Buttons -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" 
+        <StackPanel Grid.Row="4" Orientation="Horizontal" 
                     HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="Refresh" Click="Refresh_Click"
-                    Padding="20,10" Margin="0,0,10,0"
+            <Button Content="Refresh List" Click="Refresh_Click"
+                    Padding="15,10" Margin="0,0,10,0"
                     Background="#5A5A5A" Foreground="White"
                     BorderThickness="0"/>
             <Button Content="Cancel" Click="Cancel_Click"
-                    Padding="20,10" Margin="0,0,10,0"
+                    Padding="15,10" Margin="0,0,10,0"
                     Background="#5A5A5A" Foreground="White"
                     BorderThickness="0"/>
-            <Button Content="Load" Click="Load_Click"
+            <Button Content="Load Model" Click="Load_Click"
                     Padding="20,10"
                     Background="#28A745" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0"/>
+                    FontWeight="Bold" BorderThickness="0"
+                    IsEnabled="{Binding ShowAnalysisPanel}"/>
         </StackPanel>
     </Grid>
 </Window>
