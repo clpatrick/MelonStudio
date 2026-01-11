@@ -19,13 +19,13 @@ jobs:
         dotnet-version: '8.0.x'
     
     - name: Restore dependencies
-      run: dotnet restore MelonStudio.sln -r win-x64
+      run: dotnet restore MelonStudio.sln
     
     - name: Build
-      run: dotnet build MelonStudio.sln --configuration Release --no-restore -r win-x64
+      run: dotnet build MelonStudio.sln --configuration Release --no-restore
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: MelonStudio-Release
-        path: MelonStudio/bin/x64/Release/net8.0-windows/win-x64/
+        path: MelonStudio/bin/Release/net8.0-windows/win-x64/
