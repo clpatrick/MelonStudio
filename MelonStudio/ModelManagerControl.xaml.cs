@@ -16,6 +16,27 @@ namespace MelonStudio
             ViewModel = new ModelManagerViewModel();
             DataContext = ViewModel;
             Loaded += OnLoaded;
+            KeyDown += ModelManagerControl_KeyDown;
+        }
+
+        private void ModelManagerControl_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                ClearModelSelection();
+                e.Handled = true;
+            }
+        }
+
+        private void ClearModelSelection()
+        {
+            ViewModel.SelectedModelDetails = null;
+            ViewModel.SelectedModelId = "";
+            ViewModel.ShowConvertButton = false;
+            ViewModel.DownloadedModelPath = null;
+            ViewModel.Variants.Clear();
+            ViewModel.SelectedVariant = null;
+            ViewModel.HasVariants = false;
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)

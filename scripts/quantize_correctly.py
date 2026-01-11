@@ -1,3 +1,4 @@
+import os
 import onnx
 from onnx import TensorProto
 from onnxruntime.quantization import quantize_dynamic, QuantType
@@ -59,7 +60,6 @@ def quantize_int8(input_model_path, output_model_path):
     print("INT8 Quantization complete.")
 
 if __name__ == "__main__":
-    import os
     from onnx import version_converter
     
     base_dir = r"models\phi3.5-hybrid"

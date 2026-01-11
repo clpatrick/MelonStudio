@@ -6,11 +6,85 @@
              xmlns:converters="clr-namespace:MelonStudio.Converters"
              mc:Ignorable="d" 
              d:DesignHeight="700" d:DesignWidth="1100"
-             Background="#1E1E1E">
+             Background="#1E1E1E"
+             Focusable="True">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <converters:NullToVisibilityConverter x:Key="NullToVis"/>
+        
+        <!-- Dark Theme ComboBox Toggle Button -->
+        <ControlTemplate x:Key="ComboBoxToggleButton" TargetType="ToggleButton">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="Border" Grid.ColumnSpan="2" Background="#3C3C3C" BorderBrush="#555555" BorderThickness="1" CornerRadius="2"/>
+                <Border Grid.Column="0" Background="#3C3C3C" BorderBrush="#555555" BorderThickness="0,0,1,0" CornerRadius="2,0,0,2"/>
+                <Path x:Name="Arrow" Grid.Column="1" Fill="#D4D4D4" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Border" Property="Background" Value="#505050"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Dark ComboBox Style -->
+        <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <Setter Property="Background" Value="#3C3C3C"/>
+            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Template="{StaticResource ComboBoxToggleButton}" Grid.Column="2" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" Margin="8,3,23,3" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder" Background="#2D2D30" BorderBrush="#555555" BorderThickness="1"/>
+                                    <ScrollViewer Margin="4,6,4,6" SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark ComboBoxItem Style -->
+        <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="#2D2D30"/>
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#007ACC"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="20">
@@ -87,7 +161,8 @@
                           ItemsSource="{Binding SortOptions}"
                           SelectedItem="{Binding SelectedSort}"
                           Margin="10,0,0,0" Padding="10,8" Width="140"
-                          Background="#3C3C3C" Foreground="#D4D4D4">
+                          Style="{StaticResource DarkComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding}" Foreground="#D4D4D4"/>
@@ -209,7 +284,9 @@
 
         <!-- Right: Model Details Panel -->
         <Border Grid.Column="1" Background="#252526" CornerRadius="8" Padding="20">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                         CanContentScroll="False"
+                         HorizontalScrollBarVisibility="Disabled">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -302,7 +379,9 @@
                              <TextBlock Text="Select Variant (Subfolder)" Foreground="#FFC107" FontWeight="SemiBold" Margin="0,0,0,5"/>
                              <ComboBox ItemsSource="{Binding Variants}" 
                                        SelectedItem="{Binding SelectedVariant}"
-                                       Background="#3C3C3C" Foreground="#D4D4D4" Padding="10,8"/>
+                                       Padding="10,8"
+                                       Style="{StaticResource DarkComboBoxStyle}"
+                                       ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
                              <TextBlock Text="Note: This will download ONLY the selected variant." 
                                         Foreground="#808080" FontSize="10" Margin="0,2,0,0"/>
                         </StackPanel>
@@ -319,58 +398,114 @@
                             <TextBlock Text="Precision" Foreground="#808080" Margin="0,0,0,5"/>
                             <ComboBox ItemsSource="{Binding PrecisionOptions}"
                                       SelectedItem="{Binding SelectedPrecision}"
-                                      Background="#3C3C3C" Foreground="#D4D4D4"
-                                      Padding="10,8"/>
+                                      Padding="10,8"
+                                      Style="{StaticResource DarkComboBoxStyle}"
+                                      ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Margin="5,0,0,0">
                             <TextBlock Text="Provider" Foreground="#808080" Margin="0,0,0,5"/>
                             <ComboBox ItemsSource="{Binding ProviderOptions}"
                                       SelectedItem="{Binding SelectedProvider}"
-                                      Background="#3C3C3C" Foreground="#D4D4D4"
-                                      Padding="10,8"/>
+                                      Padding="10,8"
+                                      Style="{StaticResource DarkComboBoxStyle}"
+                                      ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Output Folder -->
-                    <StackPanel Grid.Row="7" Margin="0,0,0,12">
-                        <TextBlock Text="Output Folder" Foreground="#808080" Margin="0,0,0,5"/>
-                        <TextBox Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
-                                 Background="#3C3C3C" Foreground="#D4D4D4"
-                                 BorderBrush="#555555" Padding="10,8"/>
-                    </StackPanel>
-
-                    <!-- HF Token -->
-                    <StackPanel Grid.Row="8" Margin="0,0,0,12">
-                        <TextBlock Text="HuggingFace Token (optional)" 
-                                   Foreground="#808080" Margin="0,0,0,5"/>
-                        <PasswordBox x:Name="HfTokenBox"
-                                     Background="#3C3C3C" Foreground="#D4D4D4"
-                                     BorderBrush="#555555" Padding="10,8"
-                                     PasswordChanged="HfTokenBox_PasswordChanged"/>
-                    </StackPanel>
+                    <!-- Advanced Settings -->
+                    <Expander Grid.Row="7" 
+                              Header="Advanced Settings"
+                              IsExpanded="False"
+                              Margin="0,0,0,12">
+                        <Expander.Style>
+                            <Style TargetType="Expander">
+                                <Setter Property="Background" Value="#2D2D2D"/>
+                                <Setter Property="Foreground" Value="#D4D4D4"/>
+                                <Setter Property="BorderBrush" Value="#555555"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </Expander.Style>
+                        <StackPanel Margin="0,10,0,0">
+                            <!-- Download Location -->
+                            <StackPanel Margin="0,0,0,12">
+                                <TextBlock Text="Download Location" Foreground="#808080" Margin="0,0,0,5"/>
+                                <TextBox Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="#3C3C3C" Foreground="#D4D4D4"
+                                         BorderBrush="#555555" Padding="10,8"/>
+                            </StackPanel>
+                            
+                            <!-- HF Token -->
+                            <StackPanel Margin="0,0,0,0">
+                                <TextBlock Text="HuggingFace Token (optional)" 
+                                           Foreground="#808080" Margin="0,0,0,5"/>
+                                <PasswordBox x:Name="HfTokenBox"
+                                             Background="#3C3C3C" Foreground="#D4D4D4"
+                                             BorderBrush="#555555" Padding="10,8"
+                                             PasswordChanged="HfTokenBox_PasswordChanged"/>
+                                <TextBlock Text="Required for private/gated models" 
+                                           Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander>
 
                     <!-- Buttons -->
                     <StackPanel Grid.Row="9">
                         <!-- Status -->
                         <Border Background="#1A1A1A" CornerRadius="4" Padding="10" Margin="0,0,0,12">
-                            <TextBlock Text="{Binding StatusMessage}" 
-                                       Foreground="#808080" TextWrapping="Wrap"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding StatusMessage}" 
+                                           Foreground="#808080" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <!-- Progress Bar -->
+                                <ProgressBar Value="{Binding DownloadProgress}" 
+                                             Maximum="100"
+                                             Height="6"
+                                             Margin="0,0,0,0"
+                                             Visibility="{Binding IsConverting, Converter={StaticResource BoolToVis}}">
+                                    <ProgressBar.Style>
+                                        <Style TargetType="ProgressBar">
+                                            <Setter Property="IsIndeterminate" Value="True"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDownloadProgressIndeterminate}" Value="False">
+                                                    <Setter Property="IsIndeterminate" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ProgressBar.Style>
+                                </ProgressBar>
+                            </StackPanel>
                         </Border>
 
                         <!-- Download Button (for ONNX models) -->
                         <Button Command="{Binding DownloadOnnxModelCommand}"
-                                IsEnabled="{Binding IsConverting, Converter={StaticResource InverseBoolConverter}}"
                                 Padding="15,12" Margin="0,0,0,8"
-                                Background="#6C5CE7" Foreground="White"
                                 FontWeight="Bold" FontSize="14" BorderThickness="0">
                             <Button.Style>
                                 <Style TargetType="Button">
+                                    <Setter Property="Background" Value="#3D3D3D"/>
+                                    <Setter Property="Foreground" Value="#808080"/>
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedModelDetails.IsOnnxModel}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsConverting}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="Background" Value="#2D2D2D"/>
+                                            <Setter Property="Foreground" Value="#606060"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding SelectedModelDetails, Converter={StaticResource NullToVis}}" Value="Collapsed">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="Background" Value="#2D2D2D"/>
+                                            <Setter Property="Foreground" Value="#606060"/>
+                                        </DataTrigger>
+                                        <Trigger Property="IsEnabled" Value="True">
+                                            <Setter Property="Background" Value="#6C5CE7"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
@@ -385,30 +520,64 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Convert Button (for source models) -->
-                        <Button Command="{Binding ConvertModelCommand}"
-                                IsEnabled="{Binding IsConverting, Converter={StaticResource InverseBoolConverter}}"
+                        <!-- Download Button (for source models) -->
+                        <Button Command="{Binding DownloadSourceModelCommand}"
                                 Padding="15,12" Margin="0,0,0,8"
-                                Background="#28A745" Foreground="White"
                                 FontWeight="Bold" FontSize="14" BorderThickness="0">
                             <Button.Style>
                                 <Style TargetType="Button">
+                                    <Setter Property="Background" Value="#3D3D3D"/>
+                                    <Setter Property="Foreground" Value="#808080"/>
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedModelDetails.IsOnnxModel}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsConverting}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="Background" Value="#2D2D2D"/>
+                                            <Setter Property="Foreground" Value="#606060"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding SelectedModelDetails, Converter={StaticResource NullToVis}}" Value="Collapsed">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                            <Setter Property="Background" Value="#2D2D2D"/>
+                                            <Setter Property="Foreground" Value="#606060"/>
+                                        </DataTrigger>
+                                        <Trigger Property="IsEnabled" Value="True">
+                                            <Setter Property="Background" Value="#28A745"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="🔄 Convert to ONNX"/>
+                                <TextBlock Text="⬇ Download"/>
                                 <TextBlock Text=" (" 
                                            Visibility="{Binding SelectedModelDetails, Converter={StaticResource NullToVis}}"/>
                                 <TextBlock Text="{Binding SelectedModelDetails.TotalSizeFormatted}"
                                            Visibility="{Binding SelectedModelDetails, Converter={StaticResource NullToVis}}"/>
                                 <TextBlock Text=")" 
                                            Visibility="{Binding SelectedModelDetails, Converter={StaticResource NullToVis}}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Convert Button (appears after successful download) -->
+                        <Button Command="{Binding OpenConvertTabCommand}"
+                                Padding="15,12" Margin="0,0,0,8"
+                                Background="#6C5CE7" Foreground="White"
+                                FontWeight="Bold" FontSize="14" BorderThickness="0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowConvertButton}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🔄 Convert to ONNX"/>
                             </StackPanel>
                         </Button>
 

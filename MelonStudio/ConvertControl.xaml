@@ -233,7 +233,7 @@
                               Padding="10,8"
                               Style="{StaticResource DarkComboBoxStyle}"
                               ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
-                    <TextBlock Text="ⓘ Uses python -m onnxruntime_genai.models.builder" 
+                    <TextBlock Text="{Binding ConverterInfoText}" 
                                FontSize="11" Foreground="#808080" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
@@ -255,25 +255,60 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Text="Precision:" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                        <!-- Precision (ORT GenAI only) / Algorithm (Olive only) - same row -->
+                        <TextBlock Text="Precision:" Foreground="#A0A0A0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsOrtGenAiSelected, Converter={StaticResource BoolToVisConverter}}"/>
+                        <TextBlock Text="Algorithm:" Foreground="#A0A0A0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsOliveSelected, Converter={StaticResource BoolToVisConverter}}"/>
                         <ComboBox Grid.Column="1" ItemsSource="{Binding PrecisionOptions}"
                                   SelectedItem="{Binding SelectedPrecision}"
                                   Padding="8,6" Margin="0,0,0,8"
                                   Style="{StaticResource DarkComboBoxStyle}"
-                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                  Visibility="{Binding IsOrtGenAiSelected, Converter={StaticResource BoolToVisConverter}}"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding QuantizationAlgorithmOptions}"
+                                  SelectedItem="{Binding SelectedQuantizationAlgorithm}"
+                                  Padding="8,6" Margin="0,0,0,8"
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                  Visibility="{Binding IsOliveSelected, Converter={StaticResource BoolToVisConverter}}"/>
 
-                        <TextBlock Grid.Row="1" Text="Provider:" Foreground="#A0A0A0" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ProviderOptions}"
+                        <!-- Precision for Olive (only shown for GPTQ and BitsAndBytes) -->
+                        <TextBlock Grid.Row="1" Text="Precision:" Foreground="#A0A0A0" VerticalAlignment="Center"
+                                   Visibility="{Binding RequiresPrecisionSelection, Converter={StaticResource BoolToVisConverter}}"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding PrecisionOptions}"
+                                  SelectedItem="{Binding SelectedPrecision}"
+                                  Padding="8,6" Margin="0,0,0,8"
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                  Visibility="{Binding RequiresPrecisionSelection, Converter={StaticResource BoolToVisConverter}}"/>
+
+                        <!-- Device (Olive only) -->
+                        <TextBlock Grid.Row="2" Text="Device:" Foreground="#A0A0A0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsOliveSelected, Converter={StaticResource BoolToVisConverter}}"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding DeviceOptions}"
+                                  SelectedItem="{Binding SelectedDevice}"
+                                  Padding="8,6" Margin="0,0,0,8"
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                  Visibility="{Binding IsOliveSelected, Converter={StaticResource BoolToVisConverter}}"/>
+
+                        <TextBlock Grid.Row="3" Text="Provider:" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding ProviderOptions}"
                                   SelectedItem="{Binding SelectedProvider}"
                                   Padding="8,6" Margin="0,0,0,8"
                                   Style="{StaticResource DarkComboBoxStyle}"
-                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                  ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                  IsEnabled="{Binding IsProviderEnabled}"/>
 
                         <!-- Hybrid Mode Checkbox -->
-                        <CheckBox Grid.Row="2" Grid.ColumnSpan="2" 
+                        <CheckBox Grid.Row="4" Grid.ColumnSpan="2" 
                                   IsChecked="{Binding EnableHybridMode}"
+                                  IsEnabled="{Binding IsHybridModeEnabled}"
                                   Foreground="#D4D4D4" Margin="0,8,0,4">
                             <TextBlock>
                                 <Run Text="Enable Hybrid CPU+GPU" FontWeight="SemiBold"/>
@@ -282,7 +317,7 @@
                         </CheckBox>
 
                         <!-- GPU Layers Slider (visible when hybrid enabled) -->
-                        <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="20,4,0,4"
+                        <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="20,4,0,4"
                                     Visibility="{Binding EnableHybridMode, Converter={StaticResource BoolToVisConverter}}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -314,7 +349,7 @@
                         </StackPanel>
 
                         <!-- Simple CPU variant option (hidden when hybrid enabled) -->
-                        <CheckBox Grid.Row="4" Grid.ColumnSpan="2" 
+                        <CheckBox Grid.Row="6" Grid.ColumnSpan="2" 
                                   IsChecked="{Binding CreateCpuVariant}"
                                   Foreground="#D4D4D4" Margin="0,4,0,0"
                                   Visibility="{Binding EnableHybridMode, Converter={StaticResource InverseBoolToVisConverter}}">

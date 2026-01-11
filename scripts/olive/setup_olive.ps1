@@ -14,8 +14,20 @@ python -m pip install --upgrade pip
 # Install dependencies
 Write-Host "Installing dependencies..."
 # Install olive-ai with GPU support, ONNX Runtime GenAI for CUDA, and transformers
-# Note: Specific torch version might be needed for CUDA 12, letting pip resolve for now.
-pip install olive-ai[gpu] onnxruntime-genai-cuda transformers torch huggingface_hub
+# Note: Install PyTorch with CUDA support first (required for mamba-ssm and GPU quantization)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install olive-ai[gpu] onnxruntime-genai-cuda transformers huggingface_hub
+# Install datasets library (required for GPTQ quantization calibration)
+pip install datasets
+# Install accelerate (required for loading quantized models in auto-opt)
+pip install accelerate
+# Install optimum with ONNX support (required for ONNX conversion dummy inputs)
+pip install "optimum[onnxruntime]"
+# Install autoawq (required for AWQ quantization algorithm)
+pip install autoawq
+# Install mamba-ssm for Mamba architecture models (e.g., Nemotron)
+# Note: mamba-ssm requires CUDA-enabled PyTorch and may need to be built from source
+pip install mamba-ssm
 
 # Verify installation
 Write-Host "Verifying installation..."

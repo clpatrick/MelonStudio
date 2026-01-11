@@ -211,6 +211,30 @@ namespace MelonStudio
                 // Embed the ModelManager content into Discover view
                 var modelManager = new ModelManagerControl();
                 DiscoverView.Children.Add(modelManager);
+                
+                // Subscribe to model downloaded event
+                modelManager.ViewModel.ModelDownloaded += OnModelDownloaded;
+            }
+        }
+
+        private async void OnModelDownloaded(string modelPath)
+        {
+            // Refresh the models list
+            RefreshLocalModels();
+            
+            // Show success message and wait briefly before switching tabs
+            await Task.Delay(2000); // 2 second delay
+            
+            // Switch to Convert tab and set up the model for conversion
+            NavConvert.IsChecked = true;
+            ShowView("Convert");
+            LoadConvertView();
+            
+            // Get the convert control and set up for local conversion
+            if (ConvertView.Children[0] is ConvertControl convertControl)
+            {
+                var modelName = Path.GetFileName(modelPath);
+                convertControl.SetModelForConversion(modelPath, modelName);
             }
         }
 

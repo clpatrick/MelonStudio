@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -45,6 +47,13 @@ namespace MelonStudio.ViewModels
 
         [ObservableProperty]
         private string _selectedProvider = "cuda";
+
+        // Olive-specific properties
+        [ObservableProperty]
+        private string _selectedDevice = "gpu";
+
+        [ObservableProperty]
+        private string _selectedQuantizationAlgorithm = "awq";
 
         [ObservableProperty]
         private bool _createCpuVariant = false;
@@ -113,9 +122,11 @@ namespace MelonStudio.ViewModels
 
         // Collections
         public ObservableCollection<LocalModelInfo> LocalModels { get; } = new();
-        public string[] PrecisionOptions { get; } = new[] { "int4", "fp16", "fp32" };
-        public string[] ProviderOptions { get; } = new[] { "cuda", "cpu", "dml" };
-        public string[] ConverterOptions { get; } = new[] { "ONNX Runtime GenAI", "Olive (coming soon)" };
+        public ObservableCollection<string> PrecisionOptions { get; } = new();
+        public ObservableCollection<string> ProviderOptions { get; } = new();
+        public ObservableCollection<string> QuantizationAlgorithmOptions { get; } = new();
+        public string[] DeviceOptions { get; } = new[] { "cpu", "gpu" };
+        public string[] ConverterOptions { get; } = new[] { "ONNX Runtime GenAI", "Olive Optimization Tool" };
 
         // Callback to request model unload from main window
         public Action? RequestModelUnload { get; set; }
@@ -127,6 +138,9 @@ namespace MelonStudio.ViewModels
             _localModelService = new LocalModelService(_settings.DefaultOutputFolder);
             _outputFolder = _settings.DefaultOutputFolder;
             _huggingFaceToken = _settings.HuggingFaceToken ?? "";
+
+            // Initialize options
+            UpdateConverterOptions();
 
             // Wire up events
             _modelBuilderService.OnOutputReceived += line => 
@@ -232,40 +246,106 @@ namespace MelonStudio.ViewModels
 
             IsAnalyzing = true;
             StatusMessage = "Analyzing model structure...";
-
+            ConversionLog = ""; // Clear previous log
 
             try 
             {
-                var result = await _modelBuilderService.InspectModelAsync(pathData);
+                // Run comprehensive analysis with all tools
+                var results = await _modelBuilderService.RunComprehensiveAnalysisAsync(pathData);
                 
-                if (result.Success)
+                if (results.Count == 0)
                 {
-                    UpdateModelInfo(result.LayerCount, result.TotalSizeGb);
-                    IsModelAnalyzed = true;
-                    AnalyzedPrecision = result.Precision;
-                    StatusMessage = $"Analysis complete: {result.LayerCount} layers, {result.Precision}, {result.TotalSizeGb:F1} GB";
+                    StatusMessage = "No analysis tools available";
+                    ConversionLog += "ERROR: No analysis tools found.\n";
+                    return;
+                }
+                
+                // Find the primary result (basic analysis) for UI updates
+                var primaryResult = results.FirstOrDefault(r => 
+                    r.ToolName == "SafeTensors Analyzer" || r.ToolName == "ONNX Analyzer");
+                
+                // Display each tool's results
+                foreach (var result in results)
+                {
+                    ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                    ConversionLog += $"MODEL ANALYSIS: {result.ToolName}\n";
+                    ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
                     
-                    // Auto-enable hybrid if layers found, but respect user choice if they change it back?
-                    // For now, just suggest it.
-                    if (result.LayerCount > 0)
+                    if (!string.IsNullOrEmpty(result.RawOutput))
+                    {
+                        ConversionLog += result.RawOutput;
+                        ConversionLog += "\n";
+                    }
+                    
+                    // For primary analysis, show parsed results
+                    if (result == primaryResult)
+                    {
+                        ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                        ConversionLog += "PARSED RESULTS\n";
+                        ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                        
+                        if (result.Success)
+                        {
+                            ConversionLog += $"✓ Success: Analysis completed successfully\n";
+                            ConversionLog += $"  Layers: {result.LayerCount}\n";
+                            ConversionLog += $"  Total Size: {result.TotalSizeGb:F2} GB\n";
+                            ConversionLog += $"  Base Size: {result.BaseSizeGb:F2} GB\n";
+                            ConversionLog += $"  Avg Layer Size: {result.AvgLayerSizeGb:F2} GB\n";
+                            ConversionLog += $"  Precision: {result.Precision}\n";
+                        }
+                        else
+                        {
+                            ConversionLog += $"✗ Failed: {result.ErrorMessage}\n";
+                        }
+                        ConversionLog += "\n";
+                    }
+                    else
+                    {
+                        // For other tools, just show status
+                        if (result.Success)
+                        {
+                            ConversionLog += "✓ Analysis completed successfully\n\n";
+                        }
+                        else if (!string.IsNullOrEmpty(result.ErrorMessage))
+                        {
+                            ConversionLog += $"⚠ {result.ErrorMessage}\n\n";
+                        }
+                    }
+                }
+                
+                // Update UI with primary result
+                if (primaryResult != null && primaryResult.Success)
+                {
+                    UpdateModelInfo(primaryResult.LayerCount, primaryResult.TotalSizeGb);
+                    IsModelAnalyzed = true;
+                    AnalyzedPrecision = primaryResult.Precision;
+                    StatusMessage = $"Analysis complete: {primaryResult.LayerCount} layers, {primaryResult.Precision}, {primaryResult.TotalSizeGb:F1} GB";
+                    
+                    // Auto-enable hybrid if layers found (only for ORT GenAI)
+                    if (primaryResult.LayerCount > 0 && IsOrtGenAiSelected)
                     {
                         EnableHybridMode = true;
                     }
 
-                    // Auto-select precision
-                    if (!string.IsNullOrEmpty(result.Precision))
+                    // Auto-select precision (only for ORT GenAI)
+                    if (IsOrtGenAiSelected && !string.IsNullOrEmpty(primaryResult.Precision))
                     {
-                        var prec = result.Precision.ToLower();
+                        var prec = primaryResult.Precision.ToLower();
                         if (prec.Contains("int4") || prec.Contains("int8")) SelectedPrecision = "int4";
-                        else if (prec.Contains("fp16")) SelectedPrecision = "fp16";
+                        else if (prec.Contains("fp16") || prec.Contains("bf16")) SelectedPrecision = "fp16";
                         else if (prec.Contains("fp32")) SelectedPrecision = "fp32";
                     }
+
+                    // Update quantization algorithms for Olive
+                    if (IsOliveSelected)
+                    {
+                        UpdateQuantizationAlgorithms();
+                    }
                 }
-                else
+                else if (primaryResult != null)
                 {
-                    // If analysis failed, show the specific error
                     IsModelAnalyzed = true; // Still reveal options so they can try standard conversion
-                    StatusMessage = $"Analysis incomplete: {result.ErrorMessage}";
+                    StatusMessage = $"Analysis incomplete: {primaryResult.ErrorMessage}";
                 }
             }
             finally
@@ -389,7 +469,25 @@ namespace MelonStudio.ViewModels
             }
 
             // Ensure unique output folder name
-            var baseFolderName = $"{modelName}_{SelectedPrecision}_{SelectedProvider}";
+            string baseFolderName;
+            if (IsOliveSelected)
+            {
+                // Olive: {modelName}_{algorithm}_{provider} or {modelName}_{algorithm}_cpu
+                if (SelectedDevice == "cpu")
+                {
+                    baseFolderName = $"{modelName}_{SelectedQuantizationAlgorithm}_cpu";
+                }
+                else
+                {
+                    baseFolderName = $"{modelName}_{SelectedQuantizationAlgorithm}_{SelectedProvider}";
+                }
+            }
+            else
+            {
+                // ORT GenAI: {modelName}_{precision}_{provider}
+                baseFolderName = $"{modelName}_{SelectedPrecision}_{SelectedProvider}";
+            }
+
             var finalFolderName = baseFolderName;
             var counter = 1;
 
@@ -404,7 +502,17 @@ namespace MelonStudio.ViewModels
             StatusMessage = $"Converting to {outputPath}...";
             ConversionLog = $"Model: {modelSource}\n";
             ConversionLog += $"Output: {outputPath}\n";
-            ConversionLog += $"Precision: {SelectedPrecision}, Provider: {SelectedProvider}\n";
+            if (IsOliveSelected)
+            {
+                ConversionLog += $"Algorithm: {SelectedQuantizationAlgorithm}, Device: {SelectedDevice}";
+                if (SelectedDevice == "gpu")
+                    ConversionLog += $", Provider: {SelectedProvider}";
+                ConversionLog += "\n";
+            }
+            else
+            {
+                ConversionLog += $"Precision: {SelectedPrecision}, Provider: {SelectedProvider}\n";
+            }
             ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
 
             // Cache directory
@@ -412,38 +520,35 @@ namespace MelonStudio.ViewModels
 
             try
             {
-                // Check if source is already an ONNX model
-                bool isOnnxSource = modelSource.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase);
-                
-                // Determine if we need to run conversion (quantization)
-                // Run if:
-                // 1. Source is NOT ONNX (need to build from safetensors/bin)
-                // 2. Source IS ONNX, but requested precision differs from analyzed precision (need to re-quantize)
-                bool precisionMatches = isOnnxSource && !string.IsNullOrEmpty(AnalyzedPrecision) && 
-                                      AnalyzedPrecision.IndexOf(SelectedPrecision, StringComparison.OrdinalIgnoreCase) >= 0;
-                
-                bool pendingConversion = !isOnnxSource || (isOnnxSource && !precisionMatches);
+                bool isOnnxSource = false;
+                bool pendingConversion = false;
 
-                if (pendingConversion)
+                if (IsOliveSelected)
                 {
-                    // If converting an existing ONNX file, usually we pass the folder to the builder
-                    string convertSource = modelSource;
-                    if (isOnnxSource && File.Exists(modelSource))
+                    // Olive workflow: 2-step process (quantize + auto-opt)
+                    ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                    ConversionLog += "Step 1/2: Quantizing model...\n";
+                    ConversionLog += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+                    StatusMessage = "Step 1/2: Quantizing model...";
+
+                    // Determine provider for auto-opt step
+                    string executionProvider = SelectedDevice == "cpu" ? "cpu" : SelectedProvider;
+
+                    // Determine precision for quantization (only for GPTQ and BitsAndBytes)
+                    string? quantizationPrecision = null;
+                    if (RequiresPrecisionSelection)
                     {
-                         convertSource = Path.GetDirectoryName(modelSource) ?? modelSource;
+                        quantizationPrecision = SelectedPrecision;
                     }
 
-                    if (isOnnxSource)
-                    {
-                         ConversionLog += $"Re-converting/Quantizing ONNX model (Source: {AnalyzedPrecision} -> Target: {SelectedPrecision})...\n";
-                    }
-
-                    var conversionSuccess = await _modelBuilderService.ConvertModelAsync(
-                        convertSource,
+                    var conversionSuccess = await _modelBuilderService.ConvertModelWithOliveAsync(
+                        modelSource,
                         outputPath,
-                        SelectedPrecision,
-                        SelectedProvider,
-                        EnableCudaGraph,
+                        SelectedQuantizationAlgorithm,
+                        quantizationPrecision,
+                        SelectedDevice,
+                        executionProvider,
+                        true, // useOrtGenai
                         string.IsNullOrEmpty(HuggingFaceToken) ? null : HuggingFaceToken,
                         cacheDir
                     );
@@ -455,16 +560,67 @@ namespace MelonStudio.ViewModels
                         SaveConversionLog(false);
                         return;
                     }
+
+                    // For Olive, we always do conversion, so pendingConversion is true
+                    pendingConversion = true;
                 }
                 else
                 {
-                    ConversionLog += "Skipping conversion (Source is already ONNX and matches target precision)\n";
-                    // For split-only, use the source path as the input for splitting
-                    outputPath = Path.GetDirectoryName(modelSource) ?? OutputFolder ?? string.Empty; 
+                    // ORT GenAI workflow: single-step conversion
+                    // Check if source is already an ONNX model
+                    isOnnxSource = modelSource.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase);
+                    
+                    // Determine if we need to run conversion (quantization)
+                    // Run if:
+                    // 1. Source is NOT ONNX (need to build from safetensors/bin)
+                    // 2. Source IS ONNX, but requested precision differs from analyzed precision (need to re-quantize)
+                    bool precisionMatches = isOnnxSource && !string.IsNullOrEmpty(AnalyzedPrecision) && 
+                                          AnalyzedPrecision.IndexOf(SelectedPrecision, StringComparison.OrdinalIgnoreCase) >= 0;
+                    
+                    pendingConversion = !isOnnxSource || (isOnnxSource && !precisionMatches);
+
+                    if (pendingConversion)
+                    {
+                        // If converting an existing ONNX file, usually we pass the folder to the builder
+                        string convertSource = modelSource;
+                        if (isOnnxSource && File.Exists(modelSource))
+                        {
+                             convertSource = Path.GetDirectoryName(modelSource) ?? modelSource;
+                        }
+
+                        if (isOnnxSource)
+                        {
+                             ConversionLog += $"Re-converting/Quantizing ONNX model (Source: {AnalyzedPrecision} -> Target: {SelectedPrecision})...\n";
+                        }
+
+                        var conversionSuccess = await _modelBuilderService.ConvertModelAsync(
+                            convertSource,
+                            outputPath,
+                            SelectedPrecision,
+                            SelectedProvider,
+                            EnableCudaGraph,
+                            string.IsNullOrEmpty(HuggingFaceToken) ? null : HuggingFaceToken,
+                            cacheDir
+                        );
+
+                        if (!conversionSuccess)
+                        {
+                            StatusMessage = "✗ Conversion failed";
+                            IsConverting = false;
+                            SaveConversionLog(false);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        ConversionLog += "Skipping conversion (Source is already ONNX and matches target precision)\n";
+                        // For split-only, use the source path as the input for splitting
+                        outputPath = Path.GetDirectoryName(modelSource) ?? OutputFolder ?? string.Empty; 
+                    }
                 }
 
-                // Create hybrid partitions if enabled
-                if (EnableHybridMode)
+                // Create hybrid partitions if enabled (only for ORT GenAI)
+                if (EnableHybridMode && IsOrtGenAiSelected)
                 {
                     // Use the source model's parent folder as the base location
                     var sourceParent = isOnnxSource 
@@ -585,6 +741,44 @@ namespace MelonStudio.ViewModels
             StartConversionCommand.NotifyCanExecuteChanged();
         }
 
+        partial void OnSelectedConverterChanged(string value)
+        {
+            UpdateConverterOptions();
+            if (IsOliveSelected)
+            {
+                UpdateQuantizationAlgorithms();
+            }
+            // Notify computed properties
+            OnPropertyChanged(nameof(IsOliveSelected));
+            OnPropertyChanged(nameof(IsOrtGenAiSelected));
+            OnPropertyChanged(nameof(IsProviderEnabled));
+            OnPropertyChanged(nameof(IsHybridModeEnabled));
+            OnPropertyChanged(nameof(ConverterInfoText));
+            OnPropertyChanged(nameof(RequiresPrecisionSelection));
+        }
+
+        partial void OnSelectedQuantizationAlgorithmChanged(string value)
+        {
+            UpdatePrecisionOptionsForAlgorithm();
+            OnPropertyChanged(nameof(RequiresPrecisionSelection));
+            
+            // Auto-select first precision if algorithm requires it and no precision is selected
+            if (RequiresPrecisionSelection && PrecisionOptions.Count > 0 && !PrecisionOptions.Contains(SelectedPrecision))
+            {
+                SelectedPrecision = PrecisionOptions[0];
+            }
+        }
+
+        partial void OnSelectedDeviceChanged(string value)
+        {
+            if (IsOliveSelected)
+            {
+                UpdateProviderOptionsForOlive();
+            }
+            // Notify computed properties
+            OnPropertyChanged(nameof(IsProviderEnabled));
+        }
+
         // Hybrid mode property change handlers
         partial void OnEnableHybridModeChanged(bool value)
         {
@@ -604,6 +798,156 @@ namespace MelonStudio.ViewModels
 
         [ObservableProperty]
         private string _analyzedPrecision = "";
+
+        // Computed properties
+        public bool IsOliveSelected => SelectedConverter == "Olive Optimization Tool";
+        public bool IsOrtGenAiSelected => SelectedConverter == "ONNX Runtime GenAI";
+        public bool IsProviderEnabled => IsOrtGenAiSelected || (IsOliveSelected && SelectedDevice == "gpu");
+        public bool IsHybridModeEnabled => IsOrtGenAiSelected;
+        public string ConverterInfoText => IsOrtGenAiSelected 
+            ? "ⓘ Uses python -m onnxruntime_genai.models.builder" 
+            : "ⓘ Uses olive quantize + auto-opt (2-step process)";
+
+        /// <summary>
+        /// Updates converter-specific options when converter selection changes.
+        /// </summary>
+        private void UpdateConverterOptions()
+        {
+            if (IsOrtGenAiSelected)
+            {
+                // ORT GenAI: Show precision options
+                PrecisionOptions.Clear();
+                foreach (var opt in new[] { "int4", "fp16", "fp32" })
+                    PrecisionOptions.Add(opt);
+                
+                // Provider options for ORT GenAI
+                ProviderOptions.Clear();
+                foreach (var opt in new[] { "cuda", "cpu", "dml" })
+                    ProviderOptions.Add(opt);
+            }
+            else if (IsOliveSelected)
+            {
+                // Olive: Hide precision (replaced by quantization algorithm)
+                PrecisionOptions.Clear();
+                
+                // Provider options depend on device (will be updated by UpdateProviderOptionsForOlive)
+                UpdateProviderOptionsForOlive();
+            }
+        }
+
+        /// <summary>
+        /// Updates provider options for Olive based on device selection.
+        /// </summary>
+        private void UpdateProviderOptionsForOlive()
+        {
+            if (!IsOliveSelected) return;
+
+            ProviderOptions.Clear();
+            if (SelectedDevice == "gpu")
+            {
+                foreach (var opt in new[] { "cuda", "dml", "tensorrt" })
+                    ProviderOptions.Add(opt);
+                
+                // Auto-select first option if current selection is not available
+                if (!ProviderOptions.Contains(SelectedProvider) && ProviderOptions.Count > 0)
+                    SelectedProvider = ProviderOptions[0];
+            }
+            // If CPU, provider options remain empty (combobox will be disabled)
+        }
+
+        /// <summary>
+        /// Updates quantization algorithm options based on model format.
+        /// </summary>
+        private void UpdateQuantizationAlgorithms()
+        {
+            if (!IsOliveSelected) return;
+
+            QuantizationAlgorithmOptions.Clear();
+
+            // Detect model format
+            string pathData = SelectedSourceType switch
+            {
+                ModelSourceType.LocalPath => LocalModelPath,
+                ModelSourceType.MyModels => SelectedLocalModel?.Path ?? "",
+                _ => ""
+            };
+
+            bool isOnnxModel = !string.IsNullOrEmpty(pathData) && 
+                              (pathData.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) ||
+                               Directory.Exists(pathData) && Directory.GetFiles(pathData, "*.onnx", SearchOption.TopDirectoryOnly).Length > 0);
+
+            // Check GPU availability
+            bool hasGpu = _modelBuilderService.CheckGpuAvailable();
+
+            if (isOnnxModel)
+            {
+                // ONNX models: BitsAndBytes, NVMO, Olive (4-bit only)
+                var onnxAlgorithms = new List<string> { "bitsandbytes", "nvmo", "olive" };
+                if (hasGpu)
+                {
+                    // AWQ and GPTQ also support ONNX
+                    onnxAlgorithms.Insert(0, "awq");
+                    onnxAlgorithms.Insert(1, "gptq");
+                }
+                foreach (var alg in onnxAlgorithms)
+                    QuantizationAlgorithmOptions.Add(alg);
+            }
+            else
+            {
+                // PyTorch/safetensors models: Quarot, Spinquant
+                var pytorchAlgorithms = new List<string> { "quarot", "spinquant" };
+                if (hasGpu)
+                {
+                    // AWQ and GPTQ support PyTorch
+                    pytorchAlgorithms.Insert(0, "awq");
+                    pytorchAlgorithms.Insert(1, "gptq");
+                }
+                foreach (var alg in pytorchAlgorithms)
+                    QuantizationAlgorithmOptions.Add(alg);
+            }
+
+            // Auto-select first option if current selection is not available
+            if (!QuantizationAlgorithmOptions.Contains(SelectedQuantizationAlgorithm) && QuantizationAlgorithmOptions.Count > 0)
+                SelectedQuantizationAlgorithm = QuantizationAlgorithmOptions[0];
+            
+            // Update precision options based on selected algorithm
+            UpdatePrecisionOptionsForAlgorithm();
+        }
+
+        /// <summary>
+        /// Updates precision options based on the selected quantization algorithm.
+        /// Only shows precision options for algorithms that support multiple precisions.
+        /// </summary>
+        private void UpdatePrecisionOptionsForAlgorithm()
+        {
+            if (!IsOliveSelected) return;
+
+            PrecisionOptions.Clear();
+
+            var algorithm = SelectedQuantizationAlgorithm?.ToLowerInvariant() ?? "";
+            
+            if (algorithm == "gptq")
+            {
+                // GPTQ supports 8, 4, 3, or 2 bits
+                foreach (var prec in new[] { "int8", "int4", "int3", "int2" })
+                    PrecisionOptions.Add(prec);
+            }
+            else if (algorithm == "bitsandbytes")
+            {
+                // BitsAndBytes supports 2, 3, 4, 5, 6, 7 bits
+                foreach (var prec in new[] { "int7", "int6", "int5", "int4", "int3", "int2" })
+                    PrecisionOptions.Add(prec);
+            }
+            // For other algorithms (AWQ, Quarot, Olive, Spinquant, NVMO), precision is fixed
+            // No precision options shown - precision will be set automatically
+        }
+
+        /// <summary>
+        /// Returns true if the selected algorithm requires precision selection.
+        /// </summary>
+        public bool RequiresPrecisionSelection => IsOliveSelected && 
+            (SelectedQuantizationAlgorithm?.ToLowerInvariant() == "gptq" || 
+             SelectedQuantizationAlgorithm?.ToLowerInvariant() == "bitsandbytes");
 
         /// <summary>
         /// Updates VRAM estimates based on current GPU/CPU layer split.
